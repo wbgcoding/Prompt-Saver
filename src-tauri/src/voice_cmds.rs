@@ -73,6 +73,7 @@ pub(crate) async fn voice_start(
             Ok(v) => v,
             Err(e) => {
                 vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+                append_crash_log(&format!("voice: start refused before the session: {e}"));
                 return Err(e);
             }
         };
@@ -84,6 +85,7 @@ pub(crate) async fn voice_start(
         // voice-privacy-off.
         if !online_ok {
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+            append_crash_log("voice: start refused before the session: voice-online-required");
             return Err("voice-online-required".to_string());
         }
         let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -117,6 +119,7 @@ pub(crate) async fn voice_start(
             drop(slot);
             set_tray_recording(&app, false);
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+            append_crash_log(&format!("voice: session thread did not start: {e}"));
             return Err(e.to_string());
         }
         *slot = Some(VoiceHandle { id, stop: tx, ended });
@@ -158,16 +161,6 @@ pub(crate) async fn voice_enable_online_speech(app: AppHandle, state: State<'_, 
         store.settings.ui_flags.insert("voiceOnlineOk".to_string(), true);
         save_settings(&app, &store.settings);
         Ok(())
-    }
-}
-
-// Name of the microphone voice input records from (the Windows default capture device), shown
-// read-only in the microphone's right-click menu. Async so the COM call stays off the UI thread.
-#[tauri::command]
-pub(crate) async fn voice_default_mic() -> Option<String> {
-    #[cfg(windows)]
-    {
-        tauri::async_runtime::spawn_blocking(crate::audio::default_mic_name).await.ok().flatten()
     }
 }
 

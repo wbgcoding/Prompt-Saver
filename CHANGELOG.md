@@ -87,6 +87,11 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Voice input failures are no longer silent.** When dictation ends without hearing anything, a
+  message names the Windows default microphone it listened to and opens the sound settings. A
+  missing internet connection, a blocked or unavailable microphone, sound that is too quiet or noisy
+  and an unsupported language each get their own message. Each session also leaves a short
+  diagnostic entry in the error log (status codes and device names, never any recognised text).
 - **Window screenshots without a border.** A screenshot of a window no longer carries a black
   or grey edge: the invisible resize border and the thin outline are cut off, and on Windows 11
   the rounded corners are transparent in PNG and WebP files (JPEG and BMP keep the pixels that

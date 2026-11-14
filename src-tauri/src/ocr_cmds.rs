@@ -125,6 +125,8 @@ pub(crate) struct VoiceErrorEvent {
     pub(crate) id: u64,
     pub(crate) token: u64,
     pub(crate) code: String,
+    // The Windows default microphone, set only on voice-nothing-heard.
+    pub(crate) mic: Option<String>,
 }
 
 // One session at a time: a second voice_start while this holds Some(..) gets voice-busy

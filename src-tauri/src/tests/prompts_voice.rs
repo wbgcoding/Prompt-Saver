@@ -646,6 +646,73 @@ fn voice_stop_reason_table() {
 
 #[cfg(windows)]
 #[test]
+fn voice_compile_status_maps_to_a_key_or_lets_the_session_start() {
+    assert_eq!(voice::compile_error_key(0), None);
+    assert_eq!(voice::compile_error_key(1), Some("voice-no-topic"));
+    assert_eq!(voice::compile_error_key(9), Some("voice-network"));
+    // Every other status (grammar failures, unknown, timeout, mic) is a plain failure.
+    for status in [2, 3, 4, 5, 6, 7, 8, 10, -1] {
+        assert_eq!(voice::compile_error_key(status), Some("voice-failed"), "status {status}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn voice_completed_status_maps_to_a_key_for_every_status() {
+    // Normal ends: success and the Windows silence timeout carry no error.
+    assert_eq!(voice::completed_error_key(0), None);
+    assert_eq!(voice::completed_error_key(7), None);
+    assert_eq!(voice::completed_error_key(9), Some("voice-network"));
+    assert_eq!(voice::completed_error_key(10), Some("voice-mic"));
+    assert_eq!(voice::completed_error_key(4), Some("voice-audio"));
+    // Every other status (1, 2, 3, 5, 6, 8, unreadable) is the generic failure.
+    for status in [1, 2, 3, 5, 6, 8, -1] {
+        assert_eq!(voice::completed_error_key(status), Some("voice-failed"), "status {status}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn voice_silence_without_a_hypothesis_yields_nothing_heard() {
+    // Windows' timeout (status 7 -> "silence") and the watchdog self-stop (status 0, requested
+    // "silence") both count.
+    assert_eq!(voice::end_error_key(7, voice::stop_reason(7, None), false), Some("voice-nothing-heard"));
+    assert_eq!(voice::end_error_key(0, voice::stop_reason(0, Some("silence")), false), Some("voice-nothing-heard"));
+    // Something was heard: silence is the ordinary auto-stop.
+    assert_eq!(voice::end_error_key(7, "silence", true), None);
+    assert_eq!(voice::end_error_key(0, "silence", true), None);
+    // Other reasons never complain about silence.
+    for reason in ["manual", "max", "shutdown"] {
+        assert_eq!(voice::end_error_key(0, reason, false), None, "{reason}");
+    }
+    // A failure status wins over the silence rule.
+    assert_eq!(voice::end_error_key(9, "error", false), Some("voice-network"));
+    assert_eq!(voice::end_error_key(10, "error", true), Some("voice-mic"));
+}
+
+#[cfg(windows)]
+#[test]
+fn voice_session_summary_has_codes_and_counts_only() {
+    let line = voice::session_summary(Some(7), "silence", 12, 0, 0, &[0, 1, 2], &[2]);
+    assert_eq!(
+        line,
+        "voice: session ended status=7 reason=silence secs=12 hypotheses=0 results=0 states=[0, 1, 2] quality_problems=[2]"
+    );
+    assert!(voice::session_summary(None, "error", 0, 0, 0, &[], &[]).contains("status=none"));
+}
+
+#[cfg(windows)]
+#[test]
+fn voice_error_event_carries_the_mic_name() {
+    let ev = VoiceErrorEvent { id: 1, token: 2, code: "voice-nothing-heard".into(), mic: Some("Mic (USB)".into()) };
+    let json = serde_json::to_value(&ev).unwrap();
+    assert_eq!(json["mic"], "Mic (USB)");
+    let none = serde_json::to_value(VoiceErrorEvent { id: 1, token: 2, code: "voice-failed".into(), mic: None }).unwrap();
+    assert!(none["mic"].is_null());
+}
+
+#[cfg(windows)]
+#[test]
 fn voice_should_stop_silence_window_and_zero_means_off() {
     use std::time::Duration;
     // Idle past the silence window, well under the hard cap -> "silence".

@@ -2266,31 +2266,39 @@ def run(browser, tmp):
       for (const k of ['voiceLang', 'voiceInsert', 'voiceAutoStop', 'voicePunct', 'voiceInterim']) if (!rowOf(k)) errs.push('bvq01: the row ' + k + ' is missing');
       const sec = rowOf('voiceAutoStopSec');
       if (!sec || !sec.classList.contains('hidden')) errs.push('bvq01: the silence seconds row should be hidden while auto-stop is off');
-      const nm = p.querySelector('.voice-pop-mic-name');
-      if (!nm || nm.textContent !== 'Stub Microphone') errs.push('bvq01: the microphone name reads ' + (nm && nm.textContent));
+      if (p.querySelector('.voice-pop-mic, .voice-pop-sound, .voice-pop-sep')) errs.push('bvq01: the menu still has the microphone row or the sound settings button');
+      if (!p.firstElementChild || !p.firstElementChild.classList.contains('voice-pop-title')) errs.push('bvq01: the menu does not start with its title');
       const sw = rowOf('voiceAutoStop') && rowOf('voiceAutoStop').querySelector('input');
       if (sw) {
         sw.click(); await sleep(300);
         if (sec && sec.classList.contains('hidden')) errs.push('bvq01: the silence seconds row stays hidden after auto-stop is switched on');
         if (core.settings.ui_flags.voiceAutoStop !== true) errs.push('bvq01: the auto-stop switch did not reach the settings');
       }
-      p.querySelector('.voice-pop-sound').click(); await sleep(200);
-      if (window.__SOUND_SETTINGS_OPENED__ !== true) errs.push('bvq01: the sound settings button did not call the backend');
-      if (pop()) errs.push('bvq01: the menu stays open after the sound settings button');
     }
     await rightClick('voice-btn');
     if (!pop()) errs.push('bvq01: the menu did not reopen');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await sleep(200);
     if (pop()) errs.push('bvq01: Escape did not close the menu');
-    window.__DEFAULT_MIC__ = null;
-    await rightClick('voice-btn');
-    const nm2 = document.querySelector('.voice-pop-mic-name');
-    if (!nm2 || nm2.textContent !== 'No microphone found') errs.push('bvq01: without a microphone the name reads ' + (nm2 && nm2.textContent));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await sleep(200);
+    // Every dictation failure is shown: the nothing-heard toast names the device and offers the
+    // sound settings, the other codes map to their own message.
+    const dict = await import('./dictation.js');
+    const toastMsg = () => (document.querySelector('#toast .toast-msg') || {}).textContent || '';
+    dict.routeVoiceError({ code: 'voice-nothing-heard', mic: 'Test Microphone' });
+    await sleep(100);
+    if (toastMsg().indexOf('Test Microphone') < 0) errs.push('bvq01: the nothing-heard toast does not name the microphone: ' + toastMsg());
+    const act = document.querySelector('#toast .toast-btn');
+    if (!act) errs.push('bvq01: the nothing-heard toast has no sound settings button');
+    else {
+      act.click(); await sleep(150);
+      if (window.__SOUND_SETTINGS_OPENED__ !== true) errs.push('bvq01: the sound settings button did not call the backend');
+    }
+    for (const code of ['voice-network', 'voice-mic', 'voice-audio', 'voice-no-topic', 'voice-failed']) {
+      dict.routeVoiceError({ code });
+      await sleep(60);
+      if (!toastMsg() || toastMsg().indexOf('voice-') >= 0) errs.push('bvq01: ' + code + ' shows no message of its own: ' + toastMsg());
+    }
     // From the editor: the menu sits above the dialog.
-    window.__DEFAULT_MIC__ = undefined;
     document.querySelector('#grid .tile') && document.querySelector('#grid .tile').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
     await sleep(300);
     const ed = document.querySelector('#ctx [data-act="edit"]');

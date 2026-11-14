@@ -282,7 +282,7 @@ prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
 a few seconds of silence.
 
-Right-click the microphone button for the most used voice input settings and the name of the microphone in use. Voice input always records from the Windows default microphone; change it in the Windows sound settings.
+Right-click the microphone button for the most used voice input settings. Voice input always records from the Windows default microphone; change it in the Windows sound settings. If nothing is heard, a message names that microphone and opens the sound settings; other failures (no internet connection, microphone blocked, sound too quiet) get a message of their own.
 
 Spoken punctuation and simple commands are turned into real characters unless
 Windows already placed them itself: "comma", "period", "question mark",
@@ -1238,7 +1238,7 @@ auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet.
 „neue Zeile“ …) werden zu echten Zeichen; „wörtlich“ vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
-Windows-Sprachpaket (derselbe Dialog wie bei OCR). Ein Rechtsklick auf den Mikrofon-Knopf zeigt die wichtigsten Einstellungen der Spracheingabe und den Namen des benutzten Mikrofons. Die Spracheingabe nimmt immer über das Standardmikrofon von Windows auf; ändern kannst du es in den Sound-Einstellungen von Windows.
+Windows-Sprachpaket (derselbe Dialog wie bei OCR). Ein Rechtsklick auf den Mikrofon-Knopf zeigt die wichtigsten Einstellungen der Spracheingabe. Die Spracheingabe nimmt immer über das Standardmikrofon von Windows auf; ändern kannst du es in den Sound-Einstellungen von Windows. Wird nichts gehört, nennt eine Meldung dieses Mikrofon und öffnet die Sound-Einstellungen; andere Fehler (keine Internetverbindung, Mikrofon gesperrt, Ton zu leise) bekommen eine eigene Meldung.
 
 **Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim

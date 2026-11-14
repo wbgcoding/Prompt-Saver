@@ -577,43 +577,20 @@ export function wireVoiceButton(btn, targetFn) {
 }
 
 // ---- Quick voice settings (right-click on a mic button) ----
-// A second view of the existing voice settings (same rows, same storage as the expert menu)
-// plus the name of the microphone in use. Voice input records from the Windows default
-// capture device, so the name is read-only and a button opens the Windows sound settings.
+// A second view of the existing voice settings (same rows, same storage as the expert menu).
 export const voicePop = document.createElement("div");
 export function closeVoicePop() { voicePop.classList.add("hidden"); }
 function syncVoicePopGate() {
   voicePop.querySelector('[data-setting-row="voiceAutoStopSec"]')?.classList.toggle("hidden", !flag("voiceAutoStop"));
 }
-async function openVoicePop(anchorEl) {
+function openVoicePop(anchorEl) {
   if (!flag("voice")) return;
-  const mic = await invoke("voice_default_mic").catch(() => null);
   voicePop.innerHTML = "";
   const title = document.createElement("div");
   title.className = "voice-pop-title";
   title.textContent = t("voicePopTitle");
-  const micRow = document.createElement("div");
-  micRow.className = "voice-pop-mic";
-  micRow.title = t("voicePopMicTip");
-  const micLabel = document.createElement("span");
-  micLabel.className = "voice-pop-mic-label";
-  micLabel.textContent = t("voicePopMic");
-  const micName = document.createElement("span");
-  micName.className = "voice-pop-mic-name";
-  micName.textContent = mic || t("voicePopMicNone");
-  micRow.append(micLabel, micName);
-  const sound = document.createElement("button");
-  sound.type = "button";
-  sound.className = "head-toggle voice-pop-sound";
-  sound.textContent = t("voicePopOpenSound");
-  sound.addEventListener("click", () => {
-    closeVoicePop();
-    invoke("open_sound_settings").catch((e) => errToast(e));
-  });
-  const sep = document.createElement("div");
-  sep.className = "voice-pop-sep";
   voicePop.append(
-    title, micRow, sound, sep,
+    title,
     dropdownRow("voiceLang"), dropdownRow("voiceInsert"),
     flagRow("voiceAutoStop"), valueRow("voiceAutoStopSec"),
     flagRow("voicePunct"), flagRow("voiceInterim"),
@@ -634,8 +611,11 @@ export async function openVoiceOnlineConsent() {
   settings.ui_flags = { ...(settings.ui_flags || {}), voiceOnlineOk: true };
   applyFlags();
 }
+// `err` is a rejected voice_start (a code string) or the whole voice-error payload
+// ({ code, mic }), which the nothing-heard message needs for the device name.
 export function routeVoiceError(err) {
-  const code = String(err);
+  const payload = err && typeof err === "object" ? err : {};
+  const code = String(err && typeof err === "object" ? payload.code : err);
   // No error toast: the fix is always the same, so the first click just opens the dialog that
   // offers it (the OCR button does the same).
   if (code === "voice-no-language") { openVoiceLangsModal(); return; }
@@ -646,7 +626,22 @@ export function routeVoiceError(err) {
     toast(t("voiceDeniedMsg"), { label: t("voiceOpenPrivacy"), onClick: () => invoke("open_privacy_mic").catch(() => {}) });
     return;
   }
-  const key = { "voice-busy": "voiceErrBusy", "voice-failed": "voiceErrFailed" }[code];
+  if (code === "voice-nothing-heard") {
+    // The one failure with a likely cure outside the app: name the device Windows records from
+    // and offer its sound settings. Without any default microphone the message is the
+    // microphone-unavailable one.
+    const msg = payload.mic ? t("voiceErrNothingHeard").replace("{mic}", () => payload.mic) : t("voiceErrMic");
+    toast(msg, { label: t("voiceOpenSoundSettings"), onClick: () => invoke("open_sound_settings").catch((e) => errToast(e)) });
+    return;
+  }
+  const key = {
+    "voice-busy": "voiceErrBusy",
+    "voice-failed": "voiceErrFailed",
+    "voice-network": "voiceErrNetwork",
+    "voice-mic": "voiceErrMic",
+    "voice-audio": "voiceErrAudio",
+    "voice-no-topic": "voiceErrNoTopic",
+  }[code];
   if (key) toast(t(key)); else errToast(code);
 }
 // Joins a new recognized chunk onto the target: one space, except right after a newline or an
@@ -768,9 +763,9 @@ export function bindDictation() {
     const processed = applyVoiceCommands(payload.text || "", { punct: flag("voicePunct"), autoCaps: flag("voiceAutoCaps"), lang: voiceLangCode() });
     insertVoiceText(processed, false);
   });
-  listen("voice-stopped", (e) => {
-    const payload = e.payload || {};
-    if (!voiceEventIsMine(payload)) return;
+  // The end of a session, from voice-stopped or from the voice-error that precedes it: resets
+  // the UI and hands a hotkey session's text on (an ended-with-error session may already hold some).
+  const finishVoiceSession = () => {
     const wasHotkey = voiceTargetEl === voiceHotkeyBuffer;
     const finalText = wasHotkey ? voiceHotkeyBuffer.value : "";
     const hadPartial = wasHotkey && voiceInterim !== null;
@@ -779,12 +774,17 @@ export function bindDictation() {
       if (hadPartial) holdVoiceHotkeyText(finalText);
       else deliverVoiceHotkeyText(finalText);
     }
+  };
+  listen("voice-stopped", (e) => {
+    const payload = e.payload || {};
+    if (!voiceEventIsMine(payload)) return;
+    finishVoiceSession();
   });
   listen("voice-error", (e) => {
     const payload = e.payload || {};
     if (!voiceEventIsMine(payload)) return;
-    endVoiceUi();
-    routeVoiceError(payload.code);
+    finishVoiceSession();
+    routeVoiceError(payload);
   });
   // The global hotkey toggled a session ON (toggling OFF is handled on the Rust side).
   listen("voice-hotkey-toggle", () => {

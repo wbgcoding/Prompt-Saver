@@ -154,6 +154,7 @@ ACTS = {
                     "if (gt) hb.scrollTop = gt.offsetTop - hb.offsetTop; await sleep(300);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
     "voicepop": "$('voice-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(400);",
+    "voicetoast": "const dict = await import('./dictation.js'); dict.routeVoiceError({ code: 'voice-nothing-heard', mic: 'Microphone Array (Realtek High Definition Audio)' }); await sleep(500);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     # The statistics dialog on each period pill (the default, 30 days, is "stats").
     **{f"stats_{k}": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);"

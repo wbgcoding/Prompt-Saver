@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use windows::Win32::Media::Audio::{
-    eCapture, eConsole, EDataFlow, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceCollection,
+    eCapture, eConsole, EDataFlow, ERole, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceCollection,
     IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE, WAVEFORMATEXTENSIBLE,
 };
@@ -50,8 +50,14 @@ pub fn list_mic_devices() -> Vec<MicDevice> {
 // The device Windows speech recognition records from: the default capture endpoint. None when
 // there is no microphone or the audio stack fails.
 pub fn default_mic_name() -> Option<String> {
+    default_mic_name_for(eConsole)
+}
+
+// The default capture endpoint of one role (console or communications): Windows keeps a separate
+// default per role and the two can name different devices.
+pub fn default_mic_name_for(role: ERole) -> Option<String> {
     let com_ref = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };
-    let name = default_mic_name_inner();
+    let name = default_mic_name_inner(role);
     if com_ref {
         unsafe { CoUninitialize() };
     }
@@ -59,10 +65,10 @@ pub fn default_mic_name() -> Option<String> {
 }
 
 // Kept apart so every COM object is dropped before the caller's CoUninitialize.
-fn default_mic_name_inner() -> Option<String> {
+fn default_mic_name_inner(role: ERole) -> Option<String> {
     unsafe {
         let enumerator = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let device = enumerator.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
+        let device = enumerator.GetDefaultAudioEndpoint(eCapture, role).ok()?;
         device_friendly_name(&device)
     }
 }

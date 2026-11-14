@@ -1,5 +1,5 @@
-use super::{VoiceLang, VoiceStoppedEvent, VoiceSupport, VoiceTextEvent};
-use std::sync::atomic::{AtomicBool, Ordering};
+use super::{VoiceErrorEvent, VoiceLang, VoiceStoppedEvent, VoiceSupport, VoiceTextEvent};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
@@ -9,7 +9,8 @@ use windows::Globalization::Language;
 use windows::Media::SpeechRecognition::{
     SpeechContinuousRecognitionCompletedEventArgs, SpeechContinuousRecognitionResultGeneratedEventArgs,
     SpeechContinuousRecognitionSession, SpeechRecognitionHypothesisGeneratedEventArgs,
-    SpeechRecognitionScenario, SpeechRecognitionTopicConstraint, SpeechRecognizer,
+    SpeechRecognitionQualityDegradingEventArgs, SpeechRecognitionScenario, SpeechRecognitionTopicConstraint, SpeechRecognizer,
+    SpeechRecognizerStateChangedEventArgs,
 };
 use super::ocr::ensure_winrt;
 
@@ -41,6 +42,124 @@ pub(super) fn stop_reason(status: i32, requested: Option<&'static str>) -> &'sta
         0 => requested.unwrap_or("manual"),
         _ => "error",
     }
+}
+
+// SpeechRecognitionResultStatus codes the session cares about (Windows.Media.SpeechRecognition).
+const STATUS_SUCCESS: i32 = 0;
+const STATUS_TOPIC_LANGUAGE_NOT_SUPPORTED: i32 = 1;
+const STATUS_AUDIO_QUALITY_FAILURE: i32 = 4;
+const STATUS_TIMEOUT_EXCEEDED: i32 = 7;
+const STATUS_NETWORK_FAILURE: i32 = 9;
+const STATUS_MICROPHONE_UNAVAILABLE: i32 = 10;
+
+// CompileConstraintsAsync result -> error key. None = the constraints compiled and the session
+// may start; any other status used to be ignored and left a recognizer that never hears anything.
+pub(super) fn compile_error_key(status: i32) -> Option<&'static str> {
+    match status {
+        STATUS_SUCCESS => None,
+        STATUS_TOPIC_LANGUAGE_NOT_SUPPORTED => Some("voice-no-topic"),
+        STATUS_NETWORK_FAILURE => Some("voice-network"),
+        _ => Some("voice-failed"),
+    }
+}
+
+// Completed status -> error key. Success and the silence timeout are normal ends (None); every
+// other status is a failure the person must be told about.
+pub(super) fn completed_error_key(status: i32) -> Option<&'static str> {
+    match status {
+        STATUS_SUCCESS | STATUS_TIMEOUT_EXCEEDED => None,
+        STATUS_NETWORK_FAILURE => Some("voice-network"),
+        STATUS_MICROPHONE_UNAVAILABLE => Some("voice-mic"),
+        STATUS_AUDIO_QUALITY_FAILURE => Some("voice-audio"),
+        _ => Some("voice-failed"),
+    }
+}
+
+// The error a finished session reports before voice-stopped: a failure status, or a session that
+// ended on silence (Windows' timeout or the idle watchdog) without a single hypothesis or result.
+// `heard` = at least one hypothesis or result arrived.
+pub(super) fn end_error_key(status: i32, reason: &str, heard: bool) -> Option<&'static str> {
+    if let Some(key) = completed_error_key(status) {
+        return Some(key);
+    }
+    if reason == "silence" && !heard {
+        return Some("voice-nothing-heard");
+    }
+    None
+}
+
+// One session summary line for error.log: codes and counts only, never recognized text.
+pub(super) fn session_summary(
+    status: Option<i32>,
+    reason: &str,
+    secs: u64,
+    hyps: u32,
+    results: u32,
+    states: &[i32],
+    problems: &[i32],
+) -> String {
+    let status = status.map_or_else(|| "none".to_string(), |s| s.to_string());
+    format!(
+        "voice: session ended status={status} reason={reason} secs={secs} hypotheses={hyps} results={results} states={states:?} quality_problems={problems:?}"
+    )
+}
+
+// What the session threads and WinRT callbacks count and note for the diagnostic line. Only
+// numbers: hypothesis/result counts, recognizer state codes, audio-problem codes.
+#[derive(Default)]
+struct Diag {
+    hyps: AtomicU32,
+    results: AtomicU32,
+    states: Mutex<Vec<i32>>,
+    problems: Mutex<Vec<i32>>,
+}
+
+impl Diag {
+    fn heard(&self) -> bool {
+        self.hyps.load(Ordering::SeqCst) + self.results.load(Ordering::SeqCst) > 0
+    }
+    // Each distinct code once, in the order first seen.
+    fn note(list: &Mutex<Vec<i32>>, code: i32) {
+        let mut v = list.lock().unwrap_or_else(|e| e.into_inner());
+        if !v.contains(&code) {
+            v.push(code);
+        }
+    }
+    fn line(&self, status: Option<i32>, reason: &str, started: Instant) -> String {
+        let states = self.states.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let problems = self.problems.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        session_summary(
+            status,
+            reason,
+            started.elapsed().as_secs(),
+            self.hyps.load(Ordering::SeqCst),
+            self.results.load(Ordering::SeqCst),
+            &states,
+            &problems,
+        )
+    }
+}
+
+fn log(msg: &str) {
+    super::append_crash_log(&format!("voice: {msg}"));
+}
+
+// A failed WinRT setup step: logged with its HRESULT, mapped to the stable key the window shows.
+fn fail(step: &str, e: &windows::core::Error) -> &'static str {
+    let key = error_key(e);
+    log(&format!("setup step {step} failed hr={:#010x} key={key}", e.code().0 as u32));
+    key
+}
+
+// The end of a session as the window sees it: the error first (if any), then voice-stopped. The mic
+// name rides only on the nothing-heard error, where it is the whole explanation.
+fn emit_end(app: &AppHandle, id: u64, token: u64, reason: &str, error: Option<&'static str>, mic: Option<&str>) {
+    if let Some(code) = error {
+        let mic = if code == "voice-nothing-heard" { mic.map(str::to_string) } else { None };
+        let _ = app.emit("voice-error", VoiceErrorEvent { id, token, code: code.to_string(), mic });
+    }
+    let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
+    super::set_tray_recording(app, false);
 }
 
 // The idle/hard-cap watchdog's decision as a pure function (0 = auto-stop off, the hard cap
@@ -165,10 +284,9 @@ pub(super) fn start_session(
 ) {
     ensure_winrt();
     if let Err(key) = run_session(&app, id, token, &lang, auto_stop_sec, max_sec, interim, &ended, &stop_rx) {
+        log(&format!("session failed before it ran key={key}"));
         if !ended.swap(true, Ordering::SeqCst) {
-            let _ = app.emit("voice-error", super::VoiceErrorEvent { id, token, code: key.to_string() });
-            let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
-            super::set_tray_recording(&app, false);
+            emit_end(&app, id, token, "error", Some(key), None);
         }
     }
 }
@@ -186,19 +304,64 @@ fn run_session(
     stop_rx: &mpsc::Receiver<&'static str>,
 ) -> Result<(), &'static str> {
     let session_started = Instant::now();
-    let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| error_key(&e))?;
-    let recognizer = SpeechRecognizer::Create(&language).map_err(|e| error_key(&e))?;
+    // The recognizer records from a default capture device Windows picks; both default roles are
+    // logged because the likeliest cause of "nothing heard" is a default that is not the mic in use.
+    let mic = crate::audio::default_mic_name();
+    let mic_comm = crate::audio::default_mic_name_for(windows::Win32::Media::Audio::eCommunications);
+    log(&format!(
+        "session start lang={lang} auto_stop_sec={auto_stop_sec} max_sec={max_sec} interim={interim} mic_console={mic:?} mic_communications={mic_comm:?}"
+    ));
+    let diag = Arc::new(Diag::default());
+
+    let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| fail("language", &e))?;
+    let recognizer = SpeechRecognizer::Create(&language).map_err(|e| fail("create", &e))?;
     let constraint = SpeechRecognitionTopicConstraint::Create(SpeechRecognitionScenario::Dictation, &HSTRING::from("dictation"))
-        .map_err(|e| error_key(&e))?;
-    recognizer.Constraints().and_then(|c| c.Append(&constraint)).map_err(|e| error_key(&e))?;
-    recognizer.CompileConstraintsAsync().and_then(|a| a.join()).map_err(|e| error_key(&e))?;
-    let session = recognizer.ContinuousRecognitionSession().map_err(|e| error_key(&e))?;
+        .map_err(|e| fail("constraint", &e))?;
+    recognizer.Constraints().and_then(|c| c.Append(&constraint)).map_err(|e| fail("constraint-append", &e))?;
+
+    // Diagnostics only: a failed registration here never fails the session, it just leaves the
+    // summary line without that detail.
+    {
+        let d = diag.clone();
+        if let Err(e) = recognizer.StateChanged(&TypedEventHandler::new(
+            move |_sender: Ref<SpeechRecognizer>, args: Ref<SpeechRecognizerStateChangedEventArgs>| {
+                if let Some(Ok(state)) = args.as_ref().map(|a| a.State()) {
+                    Diag::note(&d.states, state.0);
+                }
+                Ok(())
+            },
+        )) {
+            log(&format!("StateChanged not registered hr={:#010x}", e.code().0 as u32));
+        }
+        let d = diag.clone();
+        if let Err(e) = recognizer.RecognitionQualityDegrading(&TypedEventHandler::new(
+            move |_sender: Ref<SpeechRecognizer>, args: Ref<SpeechRecognitionQualityDegradingEventArgs>| {
+                if let Some(Ok(problem)) = args.as_ref().map(|a| a.Problem()) {
+                    Diag::note(&d.problems, problem.0);
+                }
+                Ok(())
+            },
+        )) {
+            log(&format!("RecognitionQualityDegrading not registered hr={:#010x}", e.code().0 as u32));
+        }
+    }
+
+    let compiled = recognizer.CompileConstraintsAsync().and_then(|a| a.join()).map_err(|e| fail("compile", &e))?;
+    let compile_status = compiled.Status().map_err(|e| fail("compile-status", &e))?.0;
+    log(&format!("compile status={compile_status}"));
+    if let Some(key) = compile_error_key(compile_status) {
+        log(&format!("compile refused key={key}"));
+        return Err(key);
+    }
+    let session = recognizer.ContinuousRecognitionSession().map_err(|e| fail("session", &e))?;
 
     // Windows' AutoStopSilenceTimeout is a redundant backstop; the app's own idle watchdog below
     // decides. With voiceAutoStop off (auto_stop_sec == 0) it is set to the hard cap so it never
     // fires earlier than max_sec.
     let watch_secs = if auto_stop_sec > 0 { auto_stop_sec } else { max_sec };
-    let _ = session.SetAutoStopSilenceTimeout(windows::Foundation::TimeSpan { Duration: watch_secs as i64 * 10_000_000 });
+    if let Err(e) = session.SetAutoStopSilenceTimeout(windows::Foundation::TimeSpan { Duration: watch_secs as i64 * 10_000_000 }) {
+        log(&format!("AutoStopSilenceTimeout not set hr={:#010x}", e.code().0 as u32));
+    }
 
     let last_activity = Arc::new(Mutex::new(Instant::now()));
     // What voice_stop or the watchdog set right before StopAsync, so the Completed handler
@@ -211,12 +374,14 @@ fn run_session(
     {
         let app2 = app.clone();
         let last2 = last_activity.clone();
+        let diag2 = diag.clone();
         // A failure here must fail the session up front like every other WinRT setup call: otherwise
         // recording would start with the idle clock blind to speech in progress.
         recognizer
             .HypothesisGenerated(&TypedEventHandler::new(
                 move |_sender: Ref<SpeechRecognizer>, args: Ref<SpeechRecognitionHypothesisGeneratedEventArgs>| {
                     *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                    diag2.hyps.fetch_add(1, Ordering::SeqCst);
                     if interim {
                         if let Some(args) = args.as_ref() {
                             if let Ok(h) = args.Hypothesis() {
@@ -229,11 +394,12 @@ fn run_session(
                     Ok(())
                 },
             ))
-            .map_err(|e| error_key(&e))?;
+            .map_err(|e| fail("hypothesis-handler", &e))?;
     }
 
     let app_r = app.clone();
     let last_r = last_activity.clone();
+    let diag_r = diag.clone();
     // Same as HypothesisGenerated: a session started without this would record forever and
     // never deliver text.
     session
@@ -242,23 +408,35 @@ fn run_session(
                 *last_r.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
                 if let Some(args) = args.as_ref() {
                     if let Ok(result) = args.Result() {
-                        if let Ok(text) = result.Text() {
-                            let text = text.to_string();
-                            // Nothing recognized in this segment -> nothing to insert.
-                            if !text.is_empty() {
-                                let _ = app_r.emit("voice-text", VoiceTextEvent { id, token, text });
+                        let status = result.Status().map(|s| s.0).unwrap_or(-1);
+                        let confidence = result.Confidence().map(|c| c.0).unwrap_or(-1);
+                        match result.Text() {
+                            Ok(text) => {
+                                let text = text.to_string();
+                                // Only the code and the empty flag are logged, never the text itself.
+                                log(&format!("result status={status} confidence={confidence} empty={}", text.is_empty()));
+                                // Nothing recognized in this segment -> nothing to insert.
+                                if !text.is_empty() {
+                                    diag_r.results.fetch_add(1, Ordering::SeqCst);
+                                    let _ = app_r.emit("voice-text", VoiceTextEvent { id, token, text });
+                                }
                             }
+                            Err(e) => log(&format!("result text unreadable status={status} hr={:#010x}", e.code().0 as u32)),
                         }
+                    } else {
+                        log("result unreadable");
                     }
                 }
                 Ok(())
             },
         ))
-        .map_err(|e| error_key(&e))?;
+        .map_err(|e| fail("result-handler", &e))?;
 
     let app_c = app.clone();
     let ended_c = ended.clone();
     let reason_c = requested_reason.clone();
+    let diag_c = diag.clone();
+    let mic_c = mic.clone();
     // The most important registration: if it fails, a session otherwise running fine would end
     // without telling the window, and the microphone icon would never clear.
     session
@@ -268,31 +446,43 @@ fn run_session(
                 if ended_c.swap(true, Ordering::SeqCst) {
                     return Ok(());
                 }
-                // A status outside the stop_reason table's named cases (0/7) only occurs on failure: map it
-                // to -1, which resolves to "error".
-                let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
+                // A status outside the stop_reason table's named cases (0/7) only occurs on failure: an
+                // unreadable one maps to -1, which resolves to "error".
+                let status = match args.as_ref().map(|a| a.Status()) {
+                    Some(Ok(s)) => s.0,
+                    _ => {
+                        log("completed status unreadable");
+                        -1
+                    }
+                };
                 let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
                 let reason = stop_reason(status, requested);
-                let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
-                super::set_tray_recording(&app_c, false);
+                let error = end_error_key(status, reason, diag_c.heard());
+                log(&diag_c.line(Some(status), reason, session_started));
+                if let Some(key) = error {
+                    log(&format!("reported to the window key={key}"));
+                }
+                emit_end(&app_c, id, token, reason, error, mic_c.as_deref());
                 Ok(())
             },
         ))
-        .map_err(|e| error_key(&e))?;
+        .map_err(|e| fail("completed-handler", &e))?;
 
-    session.StartAsync().and_then(|a| a.join()).map_err(|e| error_key(&e))?;
+    session.StartAsync().and_then(|a| a.join()).map_err(|e| fail("start", &e))?;
+    log("recognition started");
 
     // A stop the thread itself decided on (hard cap / idle watchdog): fires StopAsync, then
     // waits for Completed to flip `ended`, like an external stop.
     let self_stop = |reason: &'static str| {
         *requested_reason.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
-        if session.StopAsync().is_err() {
+        if let Err(e) = session.StopAsync() {
             // Windows refused the stop request itself (a session that ended on its own already set
             // `ended` via Completed). Completed will almost certainly never fire, so report the failure
             // immediately instead of waiting the timeout with the mic open, and not with the intended reason.
+            log(&format!("StopAsync refused reason={reason} hr={:#010x}", e.code().0 as u32));
             if !ended.swap(true, Ordering::SeqCst) {
-                let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
-                super::set_tray_recording(app, false);
+                log(&diag.line(None, "error", session_started));
+                emit_end(app, id, token, "error", Some("voice-failed"), None);
             }
             return;
         }
@@ -303,8 +493,10 @@ fn run_session(
         while !ended.load(Ordering::SeqCst) {
             if Instant::now() >= deadline {
                 if !ended.swap(true, Ordering::SeqCst) {
-                    let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
-                    super::set_tray_recording(app, false);
+                    log("Completed never arrived after StopAsync");
+                    log(&diag.line(None, reason, session_started));
+                    let error = end_error_key(STATUS_SUCCESS, reason, diag.heard());
+                    emit_end(app, id, token, reason, error, mic.as_deref());
                 }
                 break;
             }
