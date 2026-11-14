@@ -115,6 +115,7 @@ export default {
     snipEditNudgeHintText: "Pfeiltasten verschieben den Text (mit Umschalt größere Schritte). Doppelklick oder F2 bearbeitet ihn. ESC hebt die Auswahl auf.",
     snipEditNudgeHintLine: "Pfeiltasten verschieben die Linie (mit Strg nur ihren Endpunkt, mit Umschalt größere Schritte). ESC hebt die Auswahl auf.",
     snipEditNudgeHintMove: "Pfeiltasten verschieben die Auswahl (mit Umschalt größere Schritte). ESC hebt die Auswahl auf.",
+    snipCropHint: "Zum Zuschneiden einen Rand oder eine Ecke des Rahmens ziehen.",
     snipEditTextAgain: "Text erneut bearbeiten",
     snipEditTextAgainKeys: "Doppelklick / F2",
     snipEditScale: "Größe ändern",

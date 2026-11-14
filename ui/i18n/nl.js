@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "Met de pijltjestoetsen verplaats je de tekst (houd Shift ingedrukt voor grotere stappen). Dubbelklik of F2 bewerkt hem. Met ESC maak je de selectie ongedaan.",
     snipEditNudgeHintLine: "Met de pijltjestoetsen verplaats je de lijn (houd Ctrl ingedrukt om alleen het eindpunt te verplaatsen, Shift voor grotere stappen). Met ESC maak je de selectie ongedaan.",
     snipEditNudgeHintMove: "Met de pijltjestoetsen verplaats je de selectie (houd Shift ingedrukt voor grotere stappen). Met ESC maak je de selectie ongedaan.",
+    snipCropHint: "Sleep een rand of hoek van het kader om bij te snijden.",
     snipEditTextAgain: "Tekst opnieuw bewerken",
     snipEditTextAgainKeys: "Dubbelklik / F2",
     snipEditScale: "Formaat wijzigen",

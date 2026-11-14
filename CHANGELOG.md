@@ -25,6 +25,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Crop tool is easier to spot.** The crop button has a new icon that no longer looks like a close
+  button, and a hint under the image explains how to crop until the first drag.
 - **Editor handles sit outside the image.** The handles of the crop frame and of a selected
   rectangle or ellipse are drawn just outside the picture, so they no longer cover the
   image or get cut off at its border.
@@ -64,6 +66,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Editor close button after a new screenshot.** A close question left over from a previous
+  screenshot can no longer make the close button of the next one do nothing.
 - **"Only changed" in the expert menu.** A setting you reset while the filter is on now stays in
   the list until you change the view, instead of disappearing the moment it is back at its default.
 - **Underscores in the Markdown preview.** Names such as `snake_case` or

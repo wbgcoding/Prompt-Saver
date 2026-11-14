@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "Ok tuşları metni taşır (daha büyük adımlar için Shift tuşunu basılı tutun). Çift tıklama veya F2 metni düzenler. ESC seçimi kaldırır.",
     snipEditNudgeHintLine: "Ok tuşları çizgiyi taşır (yalnızca bitiş noktasını taşımak için Ctrl tuşunu, daha büyük adımlar için Shift tuşunu basılı tutun). ESC seçimi kaldırır.",
     snipEditNudgeHintMove: "Ok tuşları seçimi taşır (daha büyük adımlar için Shift tuşunu basılı tutun). ESC seçimi kaldırır.",
+    snipCropHint: "Kırpmak için çerçevenin bir kenarını veya köşesini sürükleyin.",
     snipEditTextAgain: "Metni yeniden düzenle",
     snipEditTextAgainKeys: "Çift tıklama / F2",
     snipEditScale: "Yeniden Boyutlandır",

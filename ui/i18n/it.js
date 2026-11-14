@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "I tasti freccia spostano il testo (tieni premuto Shift per incrementi maggiori). Doppio clic o F2 lo modifica. ESC deseleziona.",
     snipEditNudgeHintLine: "I tasti freccia spostano la linea (tieni premuto Ctrl per spostarne solo il punto finale, Shift per incrementi maggiori). ESC deseleziona.",
     snipEditNudgeHintMove: "I tasti freccia spostano la selezione (tieni premuto Shift per incrementi maggiori). ESC deseleziona.",
+    snipCropHint: "Trascina un bordo o un angolo del riquadro per ritagliare.",
     snipEditTextAgain: "Modifica di nuovo il testo",
     snipEditTextAgainKeys: "Doppio clic / F2",
     snipEditScale: "Ridimensiona",

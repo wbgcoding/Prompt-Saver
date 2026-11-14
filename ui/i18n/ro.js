@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "Tastele săgeată mută textul (ține apăsat Shift pentru pași mai mari). Dublu clic sau F2 îl editează. ESC deselectează.",
     snipEditNudgeHintLine: "Tastele săgeată mută linia (ține apăsat Ctrl pentru a muta doar capătul ei, Shift pentru pași mai mari). ESC deselectează.",
     snipEditNudgeHintMove: "Tastele săgeată mută selecția (ține apăsat Shift pentru pași mai mari). ESC deselectează.",
+    snipCropHint: "Trage de o margine sau de un colț al cadrului pentru a decupa.",
     snipEditTextAgain: "Editează din nou textul",
     snipEditTextAgainKeys: "Dublu clic / F2",
     snipEditScale: "Redimensionare",

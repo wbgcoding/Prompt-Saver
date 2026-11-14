@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "Klawisze strzałek przesuwają tekst (przytrzymaj Shift, aby wykonywać większe kroki). Dwukrotne kliknięcie lub F2 go edytuje. ESC usuwa zaznaczenie.",
     snipEditNudgeHintLine: "Klawisze strzałek przesuwają linię (przytrzymaj Ctrl, aby przesunąć tylko jej punkt końcowy, Shift, aby wykonywać większe kroki). ESC usuwa zaznaczenie.",
     snipEditNudgeHintMove: "Klawisze strzałek przesuwają zaznaczenie (przytrzymaj Shift, aby wykonywać większe kroki). ESC usuwa zaznaczenie.",
+    snipCropHint: "Przeciągnij krawędź lub róg ramki, aby przyciąć.",
     snipEditTextAgain: "Edytuj tekst ponownie",
     snipEditTextAgainKeys: "Dwukrotne kliknięcie / F2",
     snipEditScale: "Zmień rozmiar",

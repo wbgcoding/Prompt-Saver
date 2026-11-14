@@ -100,6 +100,35 @@ for (const n of ["a", "b"]) {
   check("refused presses leave no drag", sb.SE.drag, null);
 }
 
+// The crop tool's hint: shown from the start, gone after the first drag, back on a re-click.
+{
+  const hidden = new Set();
+  const hintText = {
+    dataset: {}, textContent: "",
+    classList: { toggle: (c, on) => { if (on) hidden.add(c); else hidden.delete(c); } },
+  };
+  const hsb = {
+    SE: { tool: "crop", cropHintDismissed: false, lastNudged: null, cropRect: { x: 0, y: 0, w: 100, h: 100 }, drag: null },
+    snipEditNudgeHintEl: { firstElementChild: hintText },
+    t: (k) => k,
+  };
+  vm.createContext(hsb);
+  vm.runInContext("const SNIP_HANDLE_PX = 10;", hsb);
+  for (const marker of ["function snipEditUpdateNudgeHint() {", "function snipEditStartHandleDrag(kind, handle, pt) {"]) {
+    vm.runInContext(extractBlock(marker), hsb);
+  }
+  hsb.snipEditUpdateNudgeHint();
+  check("crop hint: shown on a fresh crop tool", [hidden.has("hidden"), hintText.textContent], [false, "snipCropHint"]);
+  hsb.snipEditStartHandleDrag("crop-resize", "e", { x: 0, y: 0 });
+  check("crop hint: gone after the first drag", hidden.has("hidden"), true);
+  hsb.SE.cropHintDismissed = false;
+  hsb.snipEditUpdateNudgeHint();
+  check("crop hint: back after a reset", [hidden.has("hidden"), hintText.textContent], [false, "snipCropHint"]);
+  hsb.SE.tool = "rect";
+  hsb.snipEditUpdateNudgeHint();
+  check("crop hint: not shown for another tool", hidden.has("hidden"), true);
+}
+
 for (const p of problems) console.log("FAIL", p);
 console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
 process.exit(problems.length ? 1 : 0);

@@ -37,7 +37,8 @@ function sandbox() {
     snipEditSyncDirty() {},
     snipEditApply: async () => { sb.log.push("apply"); },
     snipEditCancel: () => { sb.log.push("cancel"); },
-    confirmDialog: () => new Promise((res) => { sb.answer = res; }),
+    answers: [],
+    confirmDialog: () => new Promise((res) => { sb.answer = res; sb.answers.push(res); }),
   };
   vm.createContext(sb);
   const decl = "  let snipCloseRun = null;";
@@ -109,6 +110,48 @@ const tick = () => new Promise((r) => setImmediate(r));
     sb.answer("alt");
     await cap;
     check("lone replacing close cancels", sb.log, ["cancel"]);
+  }
+  // A stale run from an earlier session is dropped when a session opens, so the next close asks
+  // again instead of joining a run whose question nobody can answer any more.
+  {
+    const sb = sandbox();
+    const stale = sb.snipEditRequestClose();
+    await tick();
+    check("drop: the stale run is waiting", sb.answers.length, 1);
+    check("drop: the function exists", typeof sb.snipEditDropCloseRun, "function");
+    if (typeof sb.snipEditDropCloseRun === "function") {
+      sb.snipEditDropCloseRun();
+      const fresh = sb.snipEditRequestClose();
+      await tick();
+      check("drop: a new close starts its own run", fresh !== stale, true);
+      check("drop: and asks again", sb.answers.length, 2);
+      sb.answer("alt");
+      await fresh;
+      check("drop: the new run completes on its own", sb.log, ["apply"]);
+      sb.answers[0](false);
+      await stale;
+    }
+  }
+  // The old run finishing later must not clear a newer run or its replacing flag.
+  {
+    const sb = sandbox();
+    const old = sb.snipEditRequestClose();
+    await tick();
+    if (typeof sb.snipEditDropCloseRun === "function") {
+      sb.snipEditDropCloseRun();
+      const newer = sb.snipEditRequestClose({ replacing: true });
+      await tick();
+      sb.answers[0](false); // the old run ends now
+      await old;
+      await tick();
+      const joined = sb.snipEditRequestClose();
+      check("old finally: a newer run is still the one joined", joined === newer, true);
+      sb.answers[1]("alt");
+      await newer;
+      check("old finally: the newer run keeps its replacing flag", sb.log, ["cancel"]);
+    } else {
+      check("old finally: drop function exists", false, true);
+    }
   }
   if (problems.length) {
     console.error("FAIL\n" + problems.join("\n"));

@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "方向键移动文字（按住 Shift 可使用更大步长）。双击或按 F2 可编辑文字。按 ESC 取消选择。",
     snipEditNudgeHintLine: "方向键移动线条（按住 Ctrl 只移动终点，按住 Shift 可使用更大步长）。按 ESC 取消选择。",
     snipEditNudgeHintMove: "方向键移动选区（按住 Shift 可使用更大步长）。按 ESC 取消选择。",
+    snipCropHint: "拖动边框的边或角即可裁剪。",
     snipEditTextAgain: "再次编辑文字",
     snipEditTextAgainKeys: "双击 / F2",
     snipEditScale: "调整大小",

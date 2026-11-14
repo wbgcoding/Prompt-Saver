@@ -114,6 +114,7 @@ export default {
     snipEditNudgeHintText: "Les flèches déplacent le texte (Maj pour des pas plus grands). Double-clic ou F2 pour le modifier. ESC désélectionne.",
     snipEditNudgeHintLine: "Les flèches déplacent la ligne (Ctrl pour ne déplacer que son extrémité, Maj pour des pas plus grands). ESC désélectionne.",
     snipEditNudgeHintMove: "Les flèches déplacent la sélection (Maj pour des pas plus grands). ESC désélectionne.",
+    snipCropHint: "Faites glisser un bord ou un coin du cadre pour rogner.",
     snipEditTextAgain: "Modifier à nouveau le texte",
     snipEditTextAgainKeys: "Double-clic / F2",
     snipEditScale: "Redimensionner",

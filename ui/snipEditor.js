@@ -81,7 +81,7 @@ export function initSnipEditor() {
     step: [4, SNIP_DEFAULT_SIZES.step, 14],
   }[tool] || [2, 4, 8]);
   const SNIP_TOOL_SVG = {
-    crop: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>',
+    crop: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/><rect x="8" y="8" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 2"/></svg>',
     pen: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 20l1-4L15.5 5.5l3 3L8 19l-4 1Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M13.5 7l3 3"/></svg>',
     marker: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" d="M8 14l7-7 3 3-7 7-4 1 1-4Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 21h7"/></svg>',
     line: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="19" r="1.6" fill="currentColor"/><circle cx="19" cy="5" r="1.6" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6.3 17.7 17.7 6.3"/></svg>',
@@ -167,7 +167,7 @@ export function initSnipEditor() {
     active: false, img: null, rawCanvas: null, w: 0, h: 0,
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
-    cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
+    cropRect: null, cropHintDismissed: false, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
     onClose: null, onCancel: null, actions: null, autoSaves: null,
     // rev counts every change to the edits, savedRev the revision last written to a file.
     rev: 0, savedRev: 0,
@@ -628,13 +628,16 @@ export function initSnipEditor() {
   // Text shown only while something is nudgeable. The arrow keys have no other job in this
   // editor, but a short line always says what they currently do.
   function snipEditUpdateNudgeHint() {
-    // The line itself is always reserved under the image; only its text comes and goes.
-    snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged);
+    // The line itself is always reserved under the image; only its text comes and goes. The crop
+    // tool shows its own hint until the first drag.
+    const cropHint = SE.tool === "crop" && !SE.cropHintDismissed;
+    snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged && !cropHint);
     // The hint names only what works on this kind: Ctrl+Arrow resizes a box, moves a line's end
     // point and does nothing on the rest; a text box can also be opened again.
     const op = SE.lastNudged;
     const hintText = snipEditNudgeHintEl.firstElementChild;
-    hintText.dataset.i18n = !op ? "snipEditNudgeHint"
+    hintText.dataset.i18n = cropHint ? "snipCropHint"
+      : !op ? "snipEditNudgeHint"
       : op.tool === "text" ? "snipEditNudgeHintText"
       : op.tool === "line" || op.tool === "arrow" ? "snipEditNudgeHintLine"
       : op.rect ? "snipEditNudgeHint"
@@ -758,6 +761,8 @@ export function initSnipEditor() {
     if (kind === "crop-resize") {
       if (!SE.cropRect) return false;
       SE.drag = { kind, handle, orig: { ...SE.cropRect } };
+      SE.cropHintDismissed = true;
+      snipEditUpdateNudgeHint();
       return true;
     }
     const op = SE.selOp;
@@ -853,6 +858,8 @@ export function initSnipEditor() {
       // A box smaller than the image can be moved; a press anywhere else does nothing.
       if (!snipEditCropIsFull(r) && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) {
         SE.drag = { kind: "crop-move", start: pt, orig: { ...r } };
+        SE.cropHintDismissed = true;
+        snipEditUpdateNudgeHint();
       }
     }
   }
@@ -1461,6 +1468,7 @@ export function initSnipEditor() {
       b.addEventListener("click", () => {
         // A second click on the active tool toggles its panel.
         if (SE.tool === tdef.id && !SE.drag) {
+          if (tdef.id === "crop") { SE.cropHintDismissed = false; snipEditUpdateNudgeHint(); return; }
           if (snipEditContextIsOpen()) closeSnipEditContext(); else snipEditOpenContext();
           return;
         }
@@ -1971,6 +1979,7 @@ export function initSnipEditor() {
     };
     img.onload = () => {
       if (seq !== snipEditOpenSeq) return;
+      snipEditDropCloseRun();
       recordToolUsage("screenshot_editor");
       snipEditCancelLiveCopy();
       snipLiveCopyFailed = false;
@@ -1988,6 +1997,7 @@ export function initSnipEditor() {
       SE.cropRect = null;
       SE.selOp = null;
       SE.lastNudged = null;
+      SE.cropHintDismissed = false;
       snipEditUpdateNudgeHint();
       SE.eyedropArm = null;
       snipOriginalToggle.reset();
@@ -2129,14 +2139,20 @@ export function initSnipEditor() {
   // into a replacing one: the old edited image must not reach the clipboard after the new shot.
   let snipCloseRun = null;
   let snipCloseReplacing = false;
+  // A new session starts clean: a run left over from the one before must not keep answering for it.
+  function snipEditDropCloseRun() { snipCloseRun = null; snipCloseReplacing = false; }
   function snipEditRequestClose(opts) {
     if (snipCloseRun) {
       if (opts?.replacing) snipCloseReplacing = true;
       return snipCloseRun;
     }
     snipCloseReplacing = !!opts?.replacing;
-    snipCloseRun = snipEditRequestCloseRun(opts).finally(() => { snipCloseRun = null; snipCloseReplacing = false; });
-    return snipCloseRun;
+    // Only the run that is still current may clear the state when it ends.
+    const run = snipEditRequestCloseRun(opts).finally(() => {
+      if (snipCloseRun === run) { snipCloseRun = null; snipCloseReplacing = false; }
+    });
+    snipCloseRun = run;
+    return run;
   }
   async function snipEditRequestCloseRun() {
     snipEditFinishTextIfOpen();

@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "Las teclas de flecha mueven el texto (mantén pulsada Shift para pasos mayores). Doble clic o F2 lo edita. ESC anula la selección.",
     snipEditNudgeHintLine: "Las teclas de flecha mueven la línea (mantén pulsada Ctrl para mover solo su extremo final y Shift para pasos mayores). ESC anula la selección.",
     snipEditNudgeHintMove: "Las teclas de flecha mueven la selección (mantén pulsada Shift para pasos mayores). ESC anula la selección.",
+    snipCropHint: "Arrastra un borde o una esquina del marco para recortar.",
     snipEditTextAgain: "Editar el texto de nuevo",
     snipEditTextAgainKeys: "Doble clic / F2",
     snipEditScale: "Cambiar tamaño",

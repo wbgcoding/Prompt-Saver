@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "矢印キーでテキストを移動します（Shiftを押しながら大きなステップで移動）。ダブルクリックまたはF2で編集します。ESCで選択を解除します。",
     snipEditNudgeHintLine: "矢印キーで線を移動します（Ctrlを押しながら終点だけを移動、Shiftを押しながら大きなステップで移動）。ESCで選択を解除します。",
     snipEditNudgeHintMove: "矢印キーで選択範囲を移動します（Shiftを押しながら大きなステップで移動）。ESCで選択を解除します。",
+    snipCropHint: "枠の辺または角をドラッグして切り抜きます。",
     snipEditTextAgain: "テキストを再編集",
     snipEditTextAgainKeys: "ダブルクリック / F2",
     snipEditScale: "サイズ変更",

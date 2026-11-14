@@ -138,6 +138,7 @@ export default {
     snipEditNudgeHintText: "As teclas de seta movem o texto (mantenha Shift pressionado para passos maiores). Clique duplo ou F2 o edita. ESC desmarca a seleção.",
     snipEditNudgeHintLine: "As teclas de seta movem a linha (mantenha Ctrl pressionado para mover só o ponto final, Shift para passos maiores). ESC desmarca a seleção.",
     snipEditNudgeHintMove: "As teclas de seta movem a seleção (mantenha Shift pressionado para passos maiores). ESC desmarca a seleção.",
+    snipCropHint: "Arraste uma borda ou um canto da moldura para recortar.",
     snipEditTextAgain: "Editar o texto novamente",
     snipEditTextAgainKeys: "Clique duplo / F2",
     snipEditScale: "Redimensionar",

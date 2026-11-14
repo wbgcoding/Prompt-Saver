@@ -115,6 +115,7 @@ export default {
     snipEditNudgeHintText: "Arrow keys move the text (hold Shift for bigger steps). Double-click or F2 edits it. ESC deselects.",
     snipEditNudgeHintLine: "Arrow keys move the line (hold Ctrl to move only its end point, Shift for bigger steps). ESC deselects.",
     snipEditNudgeHintMove: "Arrow keys move the selection (hold Shift for bigger steps). ESC deselects.",
+    snipCropHint: "Drag an edge or corner of the frame to crop.",
     snipEditTextAgain: "Edit text again",
     snipEditTextAgainKeys: "Double-click / F2",
     snipEditScale: "Resize",
