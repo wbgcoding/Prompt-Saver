@@ -21,7 +21,7 @@ import { applyFlags, applyIconZoom, assignCameraDevicesCache, assignCurrentDataD
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
 import { bindDictation, closeLangsModal, closeVoicePop, voicePop, wireDictation } from "./dictation.js";
-import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, setupDragDrop, wireEditor } from "./editor.js";
+import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, rebaseModalOnStored, setupDragDrop, wireEditor } from "./editor.js";
 import { cacheFloatingState, closeTileFolderPop, tileFolderPop, wireGridFolders } from "./gridFolders.js";
 import { bgOpsPop, closeBgOpsPop, wireBgOps } from "./bgOps.js";
 import { bindTour, openTour, wireTour } from "./tour.js";
@@ -493,6 +493,8 @@ async function maybeOfferEditorDraftRecovery() {
     try { p = await invoke("get_prompt", { id: draft.promptId }); } catch (_) { p = null; }
     if (p) {
       openModal({ ...promptToModal(p), mode: "edit", id: draft.promptId, name: draft.name, text: draft.text, variants: variants ?? (p.variants || []) });
+      // The recovered edits are unsaved: the stored prompt is the baseline, so a dismiss asks first.
+      rebaseModalOnStored(p);
       return;
     }
   }

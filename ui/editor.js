@@ -151,6 +151,19 @@ export function modalSnapshot() {
   ]);
 }
 
+// Make the stored prompt the unsaved-change baseline of the open editor: the fields it shows
+// then count as edited wherever they differ from it (a recovered crash draft opens that way, so
+// closing it asks before the recovered edits are dropped).
+export function rebaseModalOnStored(p) {
+  try {
+    const base = JSON.parse(modalInitial);
+    base[SNAP_RESTORED.name] = p.name;
+    base[SNAP_RESTORED.text] = p.text;
+    base[SNAP_RESTORED.entries] = (p.variants || []).length ? [p.text, ...p.variants] : [];
+    modalInitial = JSON.stringify(base);
+  } catch { modalInitial = ""; }
+}
+
 // ---- Editor variable helper ----
 // One-line explanation per reserved name, shown as the chip's tooltip.
 export const DYN_TIPS = {
