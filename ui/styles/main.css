@@ -5217,12 +5217,12 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
   white-space: nowrap;
 }
 .toast-btn:hover { filter: brightness(1.08); }
-/* An action button without chips sits on its own line under the message (icon | message in
+/* A long message with an action button (class stacked, set in toast()) puts the button on its own line under the message (icon | message in
    row 1, the button right-aligned in row 2), so a long message gets the full card width
    instead of the column a one-row layout leaves it. max-content keeps the card as wide as
    the text wants (capped by max-width), never half the window as the left: 50% offset would
    give a shrink-to-fit box. The update card keeps its own one-row layout. */
-.toast.actionable:not(.has-chips):not(.update) {
+.toast.stacked:not(.update) {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
@@ -5230,9 +5230,9 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
   row-gap: 8px;
   width: max-content;
 }
-.toast.actionable:not(.has-chips):not(.update) .toast-ico { grid-column: 1; grid-row: 1; }
-.toast.actionable:not(.has-chips):not(.update) .toast-msg { grid-column: 2; grid-row: 1; align-self: center; }
-.toast.actionable:not(.has-chips):not(.update) .toast-btn { grid-column: 2; grid-row: 2; justify-self: end; }
+.toast.stacked:not(.update) .toast-ico { grid-column: 1; grid-row: 1; }
+.toast.stacked:not(.update) .toast-msg { grid-column: 2; grid-row: 1; align-self: center; }
+.toast.stacked:not(.update) .toast-btn { grid-column: 2; grid-row: 2; justify-self: end; }
 /* Colour-pick toast: three notations as separate copy-this-format chips, on the
    SAME line as the message. The card widens for them instead of the row breaking to a
    second line; only a genuinely too-narrow window still wraps (flex-wrap on the card),

@@ -335,6 +335,8 @@ export const TOAST_RESUME_MIN_MS = 3000;
 export const TOAST_PAUSE_CAP_MS = 30000;
 // A toast with an action button stays this long (ms) unless the call passes its own duration.
 export const TOAST_ACTION_MS = 20000;
+// Messages longer than this (characters) get the two-row layout when they carry a button.
+export const TOAST_STACK_CHARS = 40;
 export const TOAST_MOVE_SETTLE_MS = 400;
 let toastDeadline = 0;
 let toastRemaining = 0;
@@ -483,6 +485,9 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
   toastEl.classList.toggle("tinted", !!tint);
   toastEl.classList.toggle("has-chips", hasChips); // wider card, chips inline with the message
+  // A long message with an action button puts the button on its own row; a short one
+  // ("Prompt deleted" + Undo) stays on one line.
+  toastEl.classList.toggle("stacked", !!action && !hasChips && String(msg ?? "").length > TOAST_STACK_CHARS);
   if (tint) {
     toastEl.style.setProperty("--toast-tint", tint);
     toastEl.style.setProperty("--toast-ink", readableInk(tint));
