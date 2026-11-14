@@ -155,3 +155,14 @@ fn a_pre_release_suffix_does_not_zero_its_component() {
     assert!(!version_newer("2.1.5-rc1", "2.1.5"));
     assert!(!version_newer("2.1.4", "2.1.5-rc1"));
 }
+
+// A reset that brings the two switches back to their shipped "on" must also redo what flipping
+// them does: register the per-prompt hotkeys and re-plan the pill windows.
+#[test]
+fn the_expert_reset_redoes_the_hotkey_and_folder_effects() {
+    let src = include_str!("../update.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) fn reset_expert(").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.contains("rearm_hotkeys(&app)"));
+    assert!(body.contains("sync_float_windows"));
+}

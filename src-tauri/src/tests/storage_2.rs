@@ -869,8 +869,15 @@ fn reset_expert_keeps_the_keys_and_drops_the_preferences() {
     s.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed".into());
     s.ui_texts.insert("copyFont".to_string(), "mono".into());
     s.ui_flags.insert("clipWatcher".to_string(), true);
+    s.ui_flags.insert("promptHotkeys".to_string(), false);
+    s.ui_flags.insert("tourSeen".to_string(), true);
+    s.ui_flags.insert("storagePanelOpen".to_string(), true);
     s.ui_values.insert("trayRecentN".to_string(), 9.0);
     reset_expert_settings(&mut s);
+    assert_eq!(s.ui_flags.get("tourSeen"), Some(&true), "the tour stays seen");
+    assert_eq!(s.ui_flags.get("storagePanelOpen"), Some(&true), "an open panel stays open");
+    assert!(!s.ui_flags.contains_key("clipWatcher") && !s.ui_flags.contains_key("promptHotkeys"));
+    s.ui_flags.clear();
     for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed")] {
         assert_eq!(s.ui_texts.get(k).map(String::as_str), Some(v), "{k} must survive");
     }
