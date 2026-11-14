@@ -1999,3 +1999,36 @@ fn the_pending_image_is_taken_once() {
     assert_eq!(take_pending_edit_image_path().as_deref(), Some("C:\\a.png"));
     assert_eq!(take_pending_edit_image_path(), None);
 }
+
+#[test]
+fn a_client_that_never_writes_does_not_hold_the_request_read() {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();
+    rt.block_on(async {
+        let (_silent, mut server_side) = tokio::io::duplex(64);
+        let got = read_request_frame(&mut server_side, std::time::Duration::from_millis(50)).await;
+        assert!(got.is_none());
+        let (mut client, mut server_side) = tokio::io::duplex(64);
+        write_frame(&mut client, b"{}").await.unwrap();
+        assert_eq!(read_request_frame(&mut server_side, std::time::Duration::from_millis(500)).await.as_deref(), Some(&b"{}"[..]));
+    });
+}
+
+#[test]
+fn a_non_unicode_argument_does_not_panic_the_tray_check() {
+    use std::os::windows::ffi::OsStringExt;
+    let odd = std::ffi::OsString::from_wide(&[0x66, 0xD800, 0x67]);
+    assert!(!has_minimized_flag([odd.clone()]));
+    assert!(has_minimized_flag([odd, std::ffi::OsString::from("--minimized")]));
+    assert!(!has_minimized_flag(Vec::<std::ffi::OsString>::new()));
+}
+
+// The show-ping is only trusted from a pipe server that is a live process of this user.
+#[test]
+fn the_second_launch_ping_checks_the_pipe_owner_before_trusting_an_answer() {
+    let src = include_str!("cli.rs").replace("\r\n", "\n");
+    let body = &src[src.find("async fn resolve_second_launch_async").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let trust = body.find("forward_target_trusted(server_pid)").expect("the owner is checked");
+    assert!(trust < body.find("write_frame(&mut client").unwrap(), "before the ping is sent");
+    assert!(trust < body.find("show_ping_proves_life").unwrap(), "before the answer counts");
+}

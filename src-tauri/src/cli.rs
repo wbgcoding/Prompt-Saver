@@ -144,7 +144,13 @@ pub(crate) fn take_pending_edit_image_path() -> Option<String> {
 // A launch that keeps the main window away: the autostart flag, or a command that opens its
 // own window (the capture, the image editor).
 pub(crate) fn launch_stays_in_tray() -> bool {
-    launched_for_screenshot() || EDIT_IMAGE_LAUNCH.load(Ordering::SeqCst) || std::env::args().any(|a| a == "--minimized")
+    launched_for_screenshot() || EDIT_IMAGE_LAUNCH.load(Ordering::SeqCst) || has_minimized_flag(std::env::args_os())
+}
+
+// args_os, not args: an argument that is not valid Unicode (a file opened with the app) must not
+// panic the start before any window exists.
+fn has_minimized_flag(args: impl IntoIterator<Item = std::ffi::OsString>) -> bool {
+    args.into_iter().any(|a| a == "--minimized")
 }
 
 // Whether a command line is one of the commands that need the app itself (`screenshot`,
@@ -544,8 +550,13 @@ async fn accept_next(
     (connected.then_some(server), next)
 }
 
+// A client that connects and never writes must not hold a pipe instance and a task forever.
+async fn read_request_frame<R: tokio::io::AsyncRead + Unpin>(r: &mut R, wait: std::time::Duration) -> Option<Vec<u8>> {
+    tokio::time::timeout(wait, read_frame(r, MAX_FRAME_BYTES)).await.ok()?.ok()
+}
+
 async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeServer, app: AppHandle) {
-    let Ok(req_bytes) = read_frame(&mut pipe, MAX_FRAME_BYTES).await else { return };
+    let Some(req_bytes) = read_request_frame(&mut pipe, FORWARD_HANDOFF).await else { return };
     let Ok(req) = serde_json::from_slice::<PipeRequest>(&req_bytes) else { return };
     if req.argv == [SHOW_PING.to_string()] {
         respond_to_show_ping(&mut pipe, &app).await;
@@ -697,6 +708,11 @@ async fn resolve_second_launch_async() -> LaunchDecision {
     // The pid is read off the still-connected handle, before anything can end the server and let
     // Windows hand the number to someone else.
     let server_pid = named_pipe_server_pid(&client);
+    // A pipe server that is not a live process of this user (another account can create the pipe
+    // first) must not be able to answer for the app: its "alive" would end every launch windowless.
+    if !forward_target_trusted(server_pid) {
+        return LaunchDecision::Primary;
+    }
     let req = PipeRequest { argv: vec![SHOW_PING.to_string()], cwd: String::new() };
     let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::Primary };
     // Its own full budget: time spent waiting for a busy pipe must not shrink the window the
