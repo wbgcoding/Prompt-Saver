@@ -1049,10 +1049,11 @@ pub(crate) fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32
 }
 
 // The window's visible frame in global physical pixels (DWM extended frame
-// bounds: no invisible resize border, but title bar and borders included).
+// bounds: no invisible resize border, title bar included) without the outline the
+// system draws around it: the rect a window screenshot covers and the overlay highlights.
 #[cfg(windows)]
 pub(crate) fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
-    crate::win_windows::frame_rect(id)
+    crate::win_windows::visible_rect(id)
 }
 
 
@@ -1189,9 +1190,10 @@ pub(crate) fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_
         _ => image::ImageFormat::Png,
     };
     let mut buf = Vec::<u8>::new();
-    image::DynamicImage::ImageRgba8(img)
-        .write_to(&mut std::io::Cursor::new(&mut buf), out_format)
-        .ok()?;
+    // BMP has no reliable alpha: it is dropped, not composited, so a window shot's transparent
+    // corners come out as the pixels that were captured there (JPEG drops alpha the same way).
+    let img = if format == "bmp" { image::DynamicImage::ImageRgb8(image::DynamicImage::ImageRgba8(img).into_rgb8()) } else { image::DynamicImage::ImageRgba8(img) };
+    img.write_to(&mut std::io::Cursor::new(&mut buf), out_format).ok()?;
     Some(buf)
 }
 

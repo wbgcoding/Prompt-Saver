@@ -168,7 +168,8 @@ pub(super) fn checkerboard_rgba() -> Vec<u8> {
 #[test]
 fn encode_screenshot_png_webp_bmp_all_roundtrip_losslessly() {
     let rgba = checkerboard_rgba();
-    for format in ["png", "webp", "bmp"] {
+    // BMP is not in this list: it drops alpha on purpose (bmp_drops_alpha_and_keeps_the_captured_colour).
+    for format in ["png", "webp"] {
         let bytes = encode_screenshot(&rgba, 2, 2, format, 90).unwrap_or_else(|| panic!("{format} failed to encode"));
         let decoded = image::load_from_memory(&bytes).unwrap_or_else(|e| panic!("{format} failed to decode: {e}"));
         assert_eq!(decoded.width(), 2, "{format} width");

@@ -448,8 +448,9 @@ pub(crate) async fn capture_window(
         // 2. Unobstructed: the frozen desktop already shows the target cleanly.
         if occ.is_empty() {
             if let Some((ox, oy)) = origin {
-                if let Some(im) = crop_frozen(&state, mon_idx, wx - ox, wy - oy, ww as u32, wh as u32) {
+                if let Some(mut im) = crop_frozen(&state, mon_idx, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
+                        round_window_corners(&mut im, id);
                         return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                     }
                 }
@@ -474,7 +475,8 @@ pub(crate) async fn capture_window(
             restore_window_placement(o, p);
         }
         match grab {
-            Some(im) if !capture_is_blank(&im) => {
+            Some(mut im) if !capture_is_blank(&im) => {
+                round_window_corners(&mut im, id);
                 let res = if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                 // The overlay was hidden for the grab; a failed OCR or save reports its
                 // error inside that overlay, so it has to come back with the error.
@@ -493,6 +495,14 @@ pub(crate) async fn capture_window(
             }
         }
     }
+}
+
+// Makes the rounded corners of a window cut from the screen transparent, like the direct
+// grab does: the desktop behind a corner is not part of the window. The colour stays under
+// the transparency, so a JPEG or BMP keeps what was captured there.
+#[cfg(windows)]
+fn round_window_corners(im: &mut image::RgbaImage, id: u32) {
+    crate::win_windows::clear_corner_alpha(im, crate::win_windows::capture_corner_radius(id), [true; 4]);
 }
 
 // What capture_window needs to know about the clicked window, read from a single listing.

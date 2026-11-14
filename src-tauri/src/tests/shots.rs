@@ -598,3 +598,39 @@ fn an_old_working_copy_is_swept_even_when_its_process_id_is_alive() {
     assert!(openedit_dir_in_use(&name, Some(Duration::from_secs(3600))));
     assert!(!openedit_dir_in_use(&name, Some(OPENEDIT_HARD_CAP)));
 }
+
+// ---- a window shot's transparent corners keep the captured colour for JPEG and BMP ----
+
+// A transparent pixel whose colour is the captured corner, as the window capture leaves it.
+fn corner_pixel_rgba() -> Vec<u8> {
+    vec![200, 120, 40, 0, 200, 120, 40, 255, 200, 120, 40, 255, 200, 120, 40, 255]
+}
+
+#[test]
+fn bmp_drops_alpha_and_keeps_the_captured_colour() {
+    let bytes = encode_screenshot(&corner_pixel_rgba(), 2, 2, "bmp", 90).unwrap();
+    let px = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    assert_eq!(px.get_pixel(0, 0).0, [200, 120, 40, 255], "flattened onto black would read 0,0,0");
+}
+
+#[test]
+fn jpeg_drops_alpha_and_keeps_the_captured_colour() {
+    let mut rgba = Vec::new();
+    for _ in 0..16 * 16 {
+        rgba.extend_from_slice(&[200, 120, 40, 0]);
+    }
+    let bytes = encode_screenshot(&rgba, 16, 16, "jpeg", 95).unwrap();
+    let px = image::load_from_memory(&bytes).unwrap().to_rgba8();
+    let p = px.get_pixel(8, 8).0;
+    assert!(p[0].abs_diff(200) < 12 && p[1].abs_diff(120) < 12 && p[2].abs_diff(40) < 12, "got {p:?}");
+}
+
+#[test]
+fn png_and_webp_keep_the_transparent_corner() {
+    for format in ["png", "webp"] {
+        let bytes = encode_screenshot(&corner_pixel_rgba(), 2, 2, format, 90).unwrap();
+        let px = image::load_from_memory(&bytes).unwrap().to_rgba8();
+        assert_eq!(px.get_pixel(0, 0).0[3], 0, "{format}");
+        assert_eq!(px.get_pixel(1, 0).0[3], 255, "{format}");
+    }
+}

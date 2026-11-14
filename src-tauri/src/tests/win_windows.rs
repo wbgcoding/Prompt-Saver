@@ -311,3 +311,89 @@ fn the_paste_target_skips_shell_surfaces_and_own_windows() {
     assert!(!ww::is_shell_surface("Chrome_WidgetWin_1", "chrome", false));
     assert!(!ww::is_shell_surface("Windows.UI.Core.CoreWindow", "calculator", false));
 }
+
+// ---- window screenshot geometry ----
+
+#[test]
+fn a_custom_frame_window_is_cut_to_the_frame_minus_the_outline() {
+    // Client == window (Edge, VS Code), frame inset 7/0/7/7 inside it, outline 1 px.
+    let window = (0, 0, 100, 100);
+    let frame = (7, 0, 86, 93);
+    // Intersection (7,0)-(93,93), every side on the frame edge pulled in by 1.
+    assert_eq!(ww::window_capture_crop(window, window, frame, 1), Some((8, 1, 84, 91)));
+    // No outline reported (Windows 10): the frame-sized crop.
+    assert_eq!(ww::window_capture_crop(window, window, frame, 0), Some((7, 0, 86, 93)));
+    // The old client crop kept the whole bitmap, resize border included.
+    assert_eq!(ww::client_crop(window, window), Some((0, 0, 100, 100)));
+}
+
+#[test]
+fn a_standard_frame_client_inside_the_frame_is_not_inset_again() {
+    // Window with 8 px resize border, frame 7 px in, client 8 px in and a 30 px title bar.
+    let window = (100, 100, 500, 400);
+    let client = (108, 130, 492, 392);
+    let frame = (107, 100, 386, 293);
+    // Left and right: the client already lies inside the frame. Top: the title bar is not
+    // client. Bottom: client edge 392 is inside frame edge 393.
+    assert_eq!(ww::window_capture_crop(window, client, frame, 1), Some((8, 30, 384, 262)));
+    assert_eq!(ww::frame_edge_sides(client, frame), [false, false, false, false]);
+    // A custom-frame client reaches every edge of the frame.
+    assert_eq!(ww::frame_edge_sides((0, 0, 100, 100), (7, 0, 86, 93)), [true, true, true, true]);
+}
+
+#[test]
+fn the_crop_follows_negative_global_coordinates_and_rejects_nothing_left() {
+    let window = (-1000, 50, -600, 350);
+    let frame = (-993, 50, 386, 293);
+    assert_eq!(ww::window_capture_crop(window, window, frame, 1), Some((8, 1, 384, 291)));
+    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (0, 0, 10, 10), (4, 4, 2, 2), 1), None);
+    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (0, 0, 10, 10), (20, 20, 5, 5), 0), None);
+}
+
+#[test]
+fn inset_xywh_pulls_every_side_in() {
+    assert_eq!(ww::inset_xywh((10, 20, 100, 50), 0), Some((10, 20, 100, 50)));
+    assert_eq!(ww::inset_xywh((10, 20, 100, 50), 1), Some((11, 21, 98, 48)));
+    assert_eq!(ww::inset_xywh((10, 20, 100, 50), 25), None);
+    assert_eq!(ww::inset_xywh((10, 20, 100, 50), 24), Some((34, 44, 52, 2)));
+    assert_eq!(ww::inset_xywh((0, 0, 0, 5), 0), None);
+    assert_eq!(ww::inset_xywh((0, 0, 10, 10), -3), Some((0, 0, 10, 10)));
+}
+
+#[test]
+fn the_corner_radius_is_8_px_at_100_percent_and_only_for_rounded_windows() {
+    const CAPTION: u32 = 0x00C0_0000;
+    assert_eq!(ww::corner_radius_px(Some(0), false, CAPTION, 96), 8);
+    assert_eq!(ww::corner_radius_px(Some(2), false, CAPTION, 144), 12);
+    assert_eq!(ww::corner_radius_px(Some(0), false, CAPTION, 192), 16);
+    assert_eq!(ww::corner_radius_px(Some(1), false, CAPTION, 96), 0, "do not round");
+    assert_eq!(ww::corner_radius_px(None, false, CAPTION, 96), 0, "Windows 10");
+    assert_eq!(ww::corner_radius_px(Some(0), true, CAPTION, 96), 0, "maximized");
+    assert_eq!(ww::corner_radius_px(Some(0), false, 0x8000_0000, 96), 0, "popup without frame");
+}
+
+#[test]
+fn corner_alpha_is_cleared_outside_the_arc_and_the_colour_stays() {
+    let mut img = image::RgbaImage::from_pixel(40, 30, image::Rgba([9, 8, 7, 255]));
+    ww::clear_corner_alpha(&mut img, 8, [true; 4]);
+    for (x, y) in [(0, 0), (39, 0), (39, 29), (0, 29)] {
+        assert_eq!(img.get_pixel(x, y).0, [9, 8, 7, 0], "corner pixel {x},{y}");
+    }
+    // Inside the arc and in the middle nothing changes.
+    for (x, y) in [(7, 7), (20, 15), (8, 0), (0, 8), (32, 0), (39, 8)] {
+        assert_eq!(img.get_pixel(x, y).0[3], 255, "pixel {x},{y}");
+    }
+}
+
+#[test]
+fn only_the_flagged_corners_are_cleared_and_zero_radius_is_a_no_op() {
+    let mut img = image::RgbaImage::from_pixel(20, 20, image::Rgba([1, 2, 3, 255]));
+    ww::clear_corner_alpha(&mut img, 8, [true, false, false, false]);
+    assert_eq!(img.get_pixel(0, 0)[3], 0);
+    assert_eq!(img.get_pixel(19, 0)[3], 255);
+    assert_eq!(img.get_pixel(19, 19)[3], 255);
+    assert_eq!(img.get_pixel(0, 19)[3], 255);
+    let mut same = image::RgbaImage::from_pixel(20, 20, image::Rgba([1, 2, 3, 255]));
+    ww::clear_corner_alpha(&mut same, 0, [true; 4]);
+    assert!(same.pixels().all(|p| p[3] == 255));
+}

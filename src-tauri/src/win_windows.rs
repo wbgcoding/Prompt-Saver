@@ -85,6 +85,8 @@ extern "system" {
     fn IsWindow(hwnd: isize) -> i32;
     fn IsWindowVisible(hwnd: isize) -> i32;
     fn IsIconic(hwnd: isize) -> i32;
+    fn IsZoomed(hwnd: isize) -> i32;
+    fn GetDpiForWindow(hwnd: isize) -> u32;
     fn GetClassNameW(hwnd: isize, out: *mut u16, max: i32) -> i32;
     fn GetWindowLongW(hwnd: isize, index: i32) -> i32;
     fn GetWindowTextLengthW(hwnd: isize) -> i32;
@@ -128,6 +130,11 @@ const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
 const GWL_EXSTYLE: i32 = -20;
 const DWMWA_CLOAKED: u32 = 14;
 const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
+const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+const DWMWA_VISIBLE_FRAME_BORDER_THICKNESS: u32 = 37;
+const DWMWCP_DONOTROUND: u32 = 1;
+const WS_CAPTION: u32 = 0x00C0_0000;
+const WS_THICKFRAME: u32 = 0x0004_0000;
 const PW_RENDERFULLCONTENT: u32 = 2;
 const SRCCOPY: u32 = 0x00CC_0020;
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
@@ -232,6 +239,93 @@ pub(crate) fn client_crop(window: (i32, i32, i32, i32), client: (i32, i32, i32, 
         return None;
     }
     Some((x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32))
+}
+
+/// Which sides (left, top, right, bottom) of the client area lie on the edge of the visible
+/// frame (`frame` = x, y, w, h in global pixels), not inside it.
+pub(crate) fn frame_edge_sides(client: (i32, i32, i32, i32), frame: (i32, i32, i32, i32)) -> [bool; 4] {
+    let (cl, ct, cr, cb) = client;
+    [cl <= frame.0, ct <= frame.1, cr >= frame.0.saturating_add(frame.2), cb >= frame.1.saturating_add(frame.3)]
+}
+
+/// The part of a window a screenshot keeps, inside the window bitmap: x, y, w, h. It is the
+/// client area cut to the visible frame (a custom-frame app's client rect reaches into the
+/// invisible resize border), and every side that lies on the frame edge is pulled in by
+/// `border` (the outline the system draws there). None when nothing is left.
+pub(crate) fn window_capture_crop(
+    window: (i32, i32, i32, i32),
+    client: (i32, i32, i32, i32),
+    frame: (i32, i32, i32, i32),
+    border: i32,
+) -> Option<(u32, u32, u32, u32)> {
+    let (wl, wt, wr, wb) = window;
+    let (cl, ct, cr, cb) = client;
+    let (fl, ft, fr, fb) = (frame.0, frame.1, frame.0.saturating_add(frame.2), frame.1.saturating_add(frame.3));
+    let border = border.max(0);
+    let on = frame_edge_sides(client, frame);
+    let l = cl.max(fl).max(wl) + if on[0] { border } else { 0 };
+    let t = ct.max(ft).max(wt) + if on[1] { border } else { 0 };
+    let r = cr.min(fr).min(wr) - if on[2] { border } else { 0 };
+    let b = cb.min(fb).min(wb) - if on[3] { border } else { 0 };
+    if r <= l || b <= t {
+        return None;
+    }
+    Some(((l - wl) as u32, (t - wt) as u32, (r - l) as u32, (b - t) as u32))
+}
+
+/// A rect (x, y, w, h) pulled in by `t` on every side. t = 0 changes nothing; None when
+/// nothing is left.
+pub(crate) fn inset_xywh(rect: (i32, i32, i32, i32), t: i32) -> Option<(i32, i32, i32, i32)> {
+    let t = t.max(0);
+    let (x, y, w, h) = rect;
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    let (w2, h2) = (i64::from(w) - 2 * i64::from(t), i64::from(h) - 2 * i64::from(t));
+    if w2 <= 0 || h2 <= 0 {
+        return None;
+    }
+    Some((x + t, y + t, w2 as i32, h2 as i32))
+}
+
+/// The radius, in pixels, of the rounded window corners the system draws (Windows 11), or 0
+/// for square ones. `pref` is DWMWA_WINDOW_CORNER_PREFERENCE (None where the attribute does
+/// not exist, Windows 10); maximized windows and windows without a caption or sizing frame
+/// are square. The radius is 8 px at 100 % scale.
+pub(crate) fn corner_radius_px(pref: Option<u32>, zoomed: bool, style: u32, dpi: u32) -> u32 {
+    let Some(pref) = pref else { return 0 };
+    if pref == DWMWCP_DONOTROUND || zoomed || style & (WS_CAPTION | WS_THICKFRAME) == 0 {
+        return 0;
+    }
+    let dpi = if dpi == 0 { 96 } else { dpi };
+    (8 * dpi + 48) / 96
+}
+
+/// Sets alpha 0 on the pixels outside a quarter circle of `radius` at each corner flagged in
+/// `corners` (top-left, top-right, bottom-right, bottom-left). The colour channels stay, so
+/// dropping the alpha later (JPEG, BMP) gives back the captured corner.
+pub(crate) fn clear_corner_alpha(img: &mut image::RgbaImage, radius: u32, corners: [bool; 4]) {
+    let (w, h) = img.dimensions();
+    let r = radius.min(w / 2).min(h / 2);
+    if r == 0 {
+        return;
+    }
+    let rf = r as f32;
+    for dy in 0..r {
+        for dx in 0..r {
+            let ox = rf - (dx as f32 + 0.5);
+            let oy = rf - (dy as f32 + 0.5);
+            if ox * ox + oy * oy <= rf * rf {
+                continue;
+            }
+            let spots = [(dx, dy), (w - 1 - dx, dy), (w - 1 - dx, h - 1 - dy), (dx, h - 1 - dy)];
+            for (i, &(x, y)) in spots.iter().enumerate() {
+                if corners[i] {
+                    img.get_pixel_mut(x, y)[3] = 0;
+                }
+            }
+        }
+    }
 }
 
 /// GDI hands back blue, green, red, unused; the screenshot code wants red, green, blue, opaque.
@@ -375,6 +469,40 @@ pub(crate) fn frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
     Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
 }
 
+/// Thickness of the visible window outline in physical pixels; 0 where the system does not
+/// report one (Windows 10) or the window is maximized.
+fn border_thickness(hwnd: isize) -> i32 {
+    if unsafe { IsZoomed(hwnd) } != 0 {
+        return 0;
+    }
+    let mut t = 0u32;
+    let hr = unsafe { DwmGetWindowAttribute(hwnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS, &mut t as *mut u32 as *mut c_void, 4) };
+    if hr != 0 {
+        return 0;
+    }
+    t.min(16) as i32
+}
+
+/// The rect (x, y, w, h, global physical pixels) a window screenshot covers when it is cut
+/// from the screen: the visible frame without its outline. The overlay highlights the same rect.
+pub(crate) fn visible_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
+    let frame = frame_rect(id)?;
+    inset_xywh(frame, border_thickness(hwnd_of(id)))
+}
+
+/// The corner radius (physical pixels) of a screenshot of the window, measured from the
+/// outline inward; 0 when its corners are square.
+pub(crate) fn capture_corner_radius(id: u32) -> u32 {
+    let hwnd = hwnd_of(id);
+    let mut pref = 0u32;
+    let hr = unsafe { DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &mut pref as *mut u32 as *mut c_void, 4) };
+    let pref = if hr == 0 { Some(pref) } else { None };
+    let Some(info) = window_info(hwnd) else { return 0 };
+    let zoomed = unsafe { IsZoomed(hwnd) } != 0;
+    let dpi = unsafe { GetDpiForWindow(hwnd) };
+    corner_radius_px(pref, zoomed, info.style, dpi).saturating_sub(border_thickness(hwnd).max(0) as u32)
+}
+
 fn is_listable(hwnd: isize, own_pid: u32) -> bool {
     unsafe {
         if IsWindow(hwnd) == 0 || IsWindowVisible(hwnd) == 0 {
@@ -513,14 +641,21 @@ fn paint_dib(base_hwnd: isize, w: i32, h: i32, paint: impl FnOnce(isize, isize) 
     Some(unsafe { std::slice::from_raw_parts(bits as *const u8, len) }.to_vec())
 }
 
-/// The window's own pixels (client area), as the window draws itself even when other windows
-/// cover it. None when the window is gone, empty, too big or refuses to draw.
+/// The window's own pixels, as the window draws itself even when other windows cover it:
+/// the client area cut to the visible frame without the system outline, with the rounded
+/// corners transparent. None when the window is gone, empty, too big or refuses to draw.
 pub(crate) fn capture_window(id: u32) -> Option<image::RgbaImage> {
     let hwnd = hwnd_of(id);
     let info = window_info(hwnd)?;
     let (rw, rc) = (info.rc_window, info.rc_client);
     let (w, h) = (rw.right - rw.left, rw.bottom - rw.top);
-    let (cx, cy, cw, ch) = client_crop((rw.left, rw.top, rw.right, rw.bottom), (rc.left, rc.top, rc.right, rc.bottom))?;
+    let window = (rw.left, rw.top, rw.right, rw.bottom);
+    let client = (rc.left, rc.top, rc.right, rc.bottom);
+    let border = border_thickness(hwnd);
+    let ((cx, cy, cw, ch), on_frame) = match frame_rect(id) {
+        Some(frame) => (window_capture_crop(window, client, frame, border)?, frame_edge_sides(client, frame)),
+        None => (client_crop(window, client)?, [false; 4]),
+    };
     let mut bytes = paint_dib(hwnd, w, h, |mem, window_dc| unsafe {
         PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT) != 0
             || PrintWindow(hwnd, mem, 0) != 0
@@ -528,7 +663,12 @@ pub(crate) fn capture_window(id: u32) -> Option<image::RgbaImage> {
     })?;
     bgra_to_rgba_opaque(&mut bytes);
     let full = image::RgbaImage::from_raw(w as u32, h as u32, bytes)?;
-    Some(image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image())
+    let mut out = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
+    let radius = capture_corner_radius(id);
+    // A corner is only the window's corner where both of its sides are frame edges.
+    let corners = [on_frame[0] && on_frame[1], on_frame[1] && on_frame[2], on_frame[2] && on_frame[3], on_frame[3] && on_frame[0]];
+    clear_corner_alpha(&mut out, radius, corners);
+    Some(out)
 }
 
 // Owns a process handle until dropped.
