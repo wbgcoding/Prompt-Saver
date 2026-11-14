@@ -2216,6 +2216,12 @@ const isTextField = (el) => !!el && (el.tagName === "TEXTAREA" || (el.tagName ==
 const KEY_INPUT_TYPES = new Set(["range", "radio"]);
 const keepsOwnKeys = (el) => isTextField(el) || el?.tagName === "SELECT" || (el?.tagName === "INPUT" && KEY_INPUT_TYPES.has(el.type));
 let fieldFocus = null;
+// The control the pointer focused last. Chromium makes :focus-visible match on a mouse-focused button
+// as soon as any key is pressed, so the Space check below needs this to tell a mouse-focused button
+// (Space still plays) from one reached with Tab (Space activates it).
+let pointerFocus = null;
+document.addEventListener("pointerdown", (e) => { pointerFocus = e.target instanceof Element ? e.target.closest("button, a[href], [role='button'], summary") : null; }, true);
+document.addEventListener("focusin", (e) => { if (pointerFocus && e.target !== pointerFocus) pointerFocus = null; }, true);
 document.addEventListener("focusin", (e) => { fieldFocus = isTextField(e.target) ? { el: e.target, value: e.target.value } : null; });
 document.addEventListener("change", (e) => { if (fieldFocus && fieldFocus.el === e.target) fieldFocus.value = e.target.value; }, true);
 
@@ -2344,7 +2350,7 @@ document.addEventListener("keydown", (e) => {
       // A control focused from the keyboard keeps Space for its own activation; after a
       // mouse click the button has no focus ring, and Space still plays.
       const ae = document.activeElement;
-      if (ae && ae.matches("button, a[href], [role='button'], summary") && ae.matches(":focus-visible")) break;
+      if (ae && ae.matches("button, a[href], [role='button'], summary") && ae.matches(":focus-visible") && ae !== pointerFocus) break;
       if (ae && ae.matches("input[type=checkbox]")) break; // Space toggles the box
       e.preventDefault();
       togglePlay();
