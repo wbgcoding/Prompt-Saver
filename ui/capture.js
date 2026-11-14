@@ -6,7 +6,7 @@ import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS, showExpertPage } from "./expertMenu.js";
-import { bindMediaManagerEvents, openVideoCleanup } from "./recordingTools.js";
+import { bindMediaManagerEvents, openScreenshotManager, openVideoCleanup } from "./recordingTools.js";
 import { flashSettingsRow } from "./settingsSearch.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { ocrErrToast, openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
@@ -67,7 +67,8 @@ export function bindCapture() {
   });
 
   // A right-click on either composer button opens a small menu: edit an existing file, and on
-  // the record button also the camera and the recordings manager. Which editor opens is
+  // the record button also the camera and the recordings manager, on the screenshot button the
+  // screenshots manager. Which editor opens is
   // decided by the file's content (open_file_in_editor), not by the button.
   const openEditorPop = document.createElement("div");
   openEditorPop.className = "ctx open-editor-pop hidden";
@@ -77,7 +78,9 @@ export function bindCapture() {
     // A camera-only entry on the same popover, shown only when cameraRecord is on.
     '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>' +
     // Record button only: opens the media manager window on the recordings.
-    '<button type="button" role="menuitem" id="manage-recordings-item" class="hidden"></button>';
+    '<button type="button" role="menuitem" id="manage-recordings-item" class="hidden"></button>' +
+    // Screenshot button only: opens the media manager window on the screenshots.
+    '<button type="button" role="menuitem" id="manage-screenshots-item" class="hidden"></button>';
   document.body.appendChild(openEditorPop);
   function closeOpenEditorPop() {
     openEditorPop.classList.add("hidden");
@@ -85,7 +88,7 @@ export function bindCapture() {
   // path is set only when the menu is opened for a known attachment (the library's
   // right-click); left empty it lets the user pick a file.
   let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path, showCamera, showManage) {
+  function openOpenEditorPopAt(anchorEl, path, showCamera, showManage, showManageShots) {
     openEditorPopPath = path || "";
     openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
     const camItem = openEditorPop.querySelector("#camera-menu-item");
@@ -94,6 +97,9 @@ export function bindCapture() {
     const manageItem = openEditorPop.querySelector("#manage-recordings-item");
     manageItem.classList.toggle("hidden", !showManage);
     if (showManage) manageItem.textContent = t("manageRecordingsItem");
+    const shotsItem = openEditorPop.querySelector("#manage-screenshots-item");
+    shotsItem.classList.toggle("hidden", !showManageShots);
+    if (showManageShots) shotsItem.textContent = t("manageScreenshotsItem");
     placePopover(openEditorPop, anchorEl.getBoundingClientRect());
   }
   openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
@@ -109,9 +115,13 @@ export function bindCapture() {
     closeOpenEditorPop();
     openVideoCleanup();
   });
+  openEditorPop.querySelector("#manage-screenshots-item").addEventListener("click", () => {
+    closeOpenEditorPop();
+    openScreenshotManager();
+  });
   $("snip-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    openOpenEditorPopAt($("snip-btn"));
+    openOpenEditorPopAt($("snip-btn"), undefined, false, false, true);
   });
   $("record-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();

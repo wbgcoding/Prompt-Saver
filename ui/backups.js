@@ -2,7 +2,7 @@
 import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, gateOpen, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
 import { applyFlags, applyValues, rowResetBtn, withTip } from "./expertMenu.js";
 import { EXPERT_SELECTS, EXPERT_VALUES } from "./expertConfig.js";
-import { openVideoCleanup } from "./recordingTools.js";
+import { openScreenshotManager, openVideoCleanup } from "./recordingTools.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage } from "./management.js";
 import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
@@ -92,6 +92,7 @@ export const STORAGE_ROW_LABELS = {
   screenshots: "storageKeyScreenshots",
   recordings: "storageKeyRecordings",
   discarded_recordings: "storageKeyDiscardedRecordings",
+  discarded_screenshots: "storageKeyDiscardedScreenshots",
   backups: "storageKeyBackups",
   temp_files: "storageKeyTempFiles",
   edit_states: "storageKeyEditStates",
@@ -158,6 +159,15 @@ export async function renderStoragePanel(root, force) {
       openBtn.textContent = t("storageOpenFolder");
       openBtn.addEventListener("click", () => invoke("open_storage_folder", { path: item.path }).catch((e) => errToast(e)));
       row.appendChild(openBtn);
+    }
+    // The screenshot folder opens in the manager, where files can be looked at and deleted.
+    if (item.key === "screenshots") {
+      const manageBtn = document.createElement("button");
+      manageBtn.type = "button";
+      manageBtn.className = "ghost-btn storage-open-btn";
+      manageBtn.textContent = t("manageScreenshotsItem");
+      manageBtn.addEventListener("click", () => { closeBackups(); openScreenshotManager(); });
+      row.appendChild(manageBtn);
     }
     // The error log is the one row the user can empty here: it holds nothing the app needs.
     if (item.key === "crash_log" && item.bytes > 0) {

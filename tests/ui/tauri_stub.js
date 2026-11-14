@@ -1558,6 +1558,7 @@ const RESULTS = {
       { key: "database", path: "C:\\data\\data.db", bytes: 2500000, count: 2, capped: false, denied: false },
       { key: "attachments", path: "", bytes: 800000, count: 3, capped: false, denied: false },
       { key: "screenshots", path: "C:\\Pictures\\Screenshots", bytes: 1200000, count: 4, capped: false, denied: false },
+      { key: "discarded_screenshots", path: "C:\\Pictures\\Screenshots\\verworfen", bytes: 300000, count: 1, capped: false, denied: false },
       { key: "recordings", path: "C:\\Videos\\Prompt Saver", bytes: 5000000, count: 2, capped: false, denied: false },
       { key: "discarded_recordings", path: "C:\\Videos\\Prompt Saver\\verworfen", bytes: 0, count: 0, capped: false, denied: false },
       { key: "backups", path: "C:\\data\\backups", bytes: 3000000, count: 5, capped: false, denied: false },

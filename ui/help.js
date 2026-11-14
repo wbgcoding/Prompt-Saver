@@ -296,6 +296,7 @@ export const HELP_CONTENT = {
         "Click the camera icon.",
         "Drag a region, or click a window to capture it whole.",
         "The screenshot editor opens: save the shot as a file or a tile there, or just close it and paste.",
+        "Right-click the camera icon and choose \"Manage screenshots…\" to browse, open, copy or delete the screenshots you saved.",
       ],
       whatHappens:
         "The app's own windows are hidden for the moment of capture so they never end up in the shot. The result reaches the clipboard immediately; saving it as a tile or file is a separate, optional step. Saving into the screenshots folder never replaces an existing file; it takes the next free name.",
@@ -1070,6 +1071,7 @@ export const HELP_CONTENT = {
         "Auf das Kamerasymbol klicken.",
         "Einen Bereich ziehen oder ein Fenster anklicken, um es ganz zu erfassen.",
         "Der Screenshot-Editor öffnet sich: dort die Aufnahme als Datei oder Kachel speichern, oder ihn einfach schließen und einfügen.",
+        "Rechtsklick auf das Kamerasymbol und „Screenshots verwalten…“ wählen, um gespeicherte Screenshots zu durchsuchen, zu öffnen, zu kopieren oder zu löschen.",
       ],
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt. Beim Speichern im Screenshots-Ordner wird nie eine vorhandene Datei ersetzt; die Aufnahme bekommt den nächsten freien Namen.",

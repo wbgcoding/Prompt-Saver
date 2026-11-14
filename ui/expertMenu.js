@@ -16,7 +16,7 @@ import { fillScaleSelect, reloadEverything, syncSettingsControls } from "./setti
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, hotkeyMessage, prettyAccel } from "./hotkeys.js";
 import { closeBackups } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
-import { openVideoCleanup } from "./recordingTools.js";
+import { openScreenshotManager, openVideoCleanup } from "./recordingTools.js";
 import { i18nHit, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit, flashSettingsRow, openSettingsDirectoryEntry } from "./settingsSearch.js";
 import { EXPERT_NOTICES, noticeRow, noticeActionRow, actionRow } from "./expertNotices.js";
 import { fitComposerTools } from "./composerTools.js";
@@ -1305,6 +1305,17 @@ export function pathRow(key) {
     cleanBtn.textContent = t("manageRecordingsItem");
     cleanBtn.addEventListener("click", () => openVideoCleanup());
     info.append(text, cleanBtn);
+    row.appendChild(info);
+  }
+  if (key === "screenshotDir") {
+    const info = document.createElement("div");
+    info.className = "path-shot-manage";
+    const manageBtn = document.createElement("button");
+    manageBtn.type = "button";
+    manageBtn.className = "ghost-btn";
+    manageBtn.textContent = t("manageScreenshotsItem");
+    manageBtn.addEventListener("click", () => openScreenshotManager());
+    info.appendChild(manageBtn);
     row.appendChild(info);
   }
   if (cfg.syncStats) {

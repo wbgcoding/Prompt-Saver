@@ -331,9 +331,11 @@ SECTION = """\
           out.errors.push('903: the sections are not in backups/storage/retention order (' + sections.join(',') + ')');
         }
         const rows = document.querySelectorAll('#storage-panel .storage-row');
-        if (rows.length !== 9) {
-          out.errors.push('414: the storage section does not list 9 rows (found ' + rows.length + ')');
+        if (rows.length !== 10) {
+          out.errors.push('414: the storage section does not list 10 rows (found ' + rows.length + ')');
         }
+        const shotsRow = [...rows].find((r) => r.querySelector('.storage-open-btn') && /Manage screenshots/.test(r.textContent));
+        if (!shotsRow) out.errors.push('82: the storage section has no Manage screenshots action on the screenshots row');
         if (!document.getElementById('storage-remeasure-btn')) {
           out.errors.push('414: the storage section has no "measure again" button');
         }

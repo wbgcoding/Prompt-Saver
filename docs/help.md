@@ -354,6 +354,16 @@ its extension says. The editor always works on a copy, so the original file
 is never changed; saving asks where to put the result, starting in the
 original file's own folder.
 
+The screenshots you saved have their own window too: right-click the
+screenshot button and choose "Manage screenshots…", or use the button on the
+screenshot folder row in the expert menu or on the screenshots row of the
+storage overview in the backup manager. It looks like the recordings manager:
+a preview tile per screenshot with its size, date and the app it was taken
+of, sorting, filters, search, and the same actions (open in the editor, copy
+the image or the file, show in folder, delete). Only screenshots the app
+saved are listed. Deleted ones wait in "Recently discarded" and can be
+restored for a while.
+
 ### Screen recording
 
 Records a window, a monitor, or a dragged region as a video, via the record
@@ -1259,6 +1269,17 @@ Größenänderung ändert die tatsächliche Pixelgröße des Bildes (nicht nur d
 Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 25/50/200 % und "auf 1920 Breite anpassen"; sie ist selbst ein rückgängig
 machbarer Schritt.
+
+Die gespeicherten Screenshots haben ebenfalls ein eigenes Fenster:
+Rechtsklick auf den Screenshot-Button und „Screenshots verwalten…“ wählen,
+oder den Button in der Screenshot-Ordner-Zeile des Expertenmenüs bzw. in der
+Screenshot-Zeile der Speicherübersicht im Backup-Manager benutzen. Es sieht aus
+wie der Aufnahmen-Manager: eine Vorschau-Kachel pro Screenshot mit Größe, Datum
+und der Anwendung, von der er stammt, Sortierung, Filter, Suche und dieselben
+Aktionen (im Editor öffnen, Bild oder Datei kopieren, im Ordner zeigen,
+löschen). Aufgelistet werden nur Screenshots, die die App gespeichert hat.
+Gelöschte warten unter „Kürzlich verworfen“ und lassen sich eine Zeit lang
+wiederherstellen.
 
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
 Bereich als Video auf, über den Aufnahme-Button neben dem Screenshot-Werkzeug.

@@ -96,10 +96,29 @@ SECTION = """\
           if (!mgr60 || mgr60[1].kind !== 'recordings') out.errors.push('60: Manage recordings did not open the media manager on the recordings');
         }
       }
+      if (!document.getElementById('manage-screenshots-item')?.classList.contains('hidden')) out.errors.push('82: the record button menu shows the Manage screenshots entry');
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
       if (openEditPop && !openEditPop.classList.contains('hidden')) {
         out.errors.push('417: clicking outside the open-in-editor menu did not close it');
+      }
+      // 82-menu: the screenshot button's menu leads to the screenshots manager.
+      snipBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      {
+        const core82 = await import('./core.js');
+        const shots82 = document.getElementById('manage-screenshots-item');
+        if (!shots82 || shots82.classList.contains('hidden')) {
+          out.errors.push('82: the screenshot button menu has no visible Manage screenshots entry');
+        } else {
+          if (shots82.textContent.trim() !== core82.t('manageScreenshotsItem')) out.errors.push('82: the Manage screenshots entry is mislabelled: ' + shots82.textContent);
+          window.__SMOKE_ARGS__ = [];
+          shots82.click();
+          await sleep(300);
+          const mgr82 = window.__SMOKE_ARGS__.find(([c]) => c === 'open_media_manager');
+          if (!mgr82 || mgr82[1].kind !== 'screenshots') out.errors.push('82: Manage screenshots did not open the media manager on the screenshots');
+          if (!document.querySelector('.open-editor-pop')?.classList.contains('hidden')) out.errors.push('82: choosing Manage screenshots left the menu open');
+        }
       }
       // Picking a VIDEO through the screenshot (image) button must still open
       // the video editor: content decides, never which button was used.

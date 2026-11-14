@@ -729,6 +729,14 @@ pub(crate) fn scan_dir_stats_with(
     (count, bytes, capped, false)
 }
 
+// The screenshots' holding folder as its own row, beside the recordings' one: a screenshot the
+// manager discarded waits there until it ages out.
+pub(crate) fn discarded_screenshots_row(screenshot_root: &std::path::Path) -> StorageItem {
+    let dir = discard_trash_dir(screenshot_root);
+    let (count, bytes, capped, denied) = scan_dir_stats(&dir, STORAGE_SCAN_CAP);
+    StorageItem { key: "discarded_screenshots".into(), path: dir.to_string_lossy().into_owned(), bytes, count, capped, denied }
+}
+
 pub(crate) fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
     scan_dir_stats_with(dir, cap, |p| std::fs::read_dir(p))
 }
@@ -839,6 +847,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
             let target = screenshot_dir(&screenshot_custom);
             let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
             items.push(StorageItem { key: "screenshots".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+            items.push(discarded_screenshots_row(&target));
         }
 
         // Recordings, plus the discard trash as a separate row: the same folder the expert menu's

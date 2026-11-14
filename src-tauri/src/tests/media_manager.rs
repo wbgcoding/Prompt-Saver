@@ -229,3 +229,45 @@ fn every_manager_command_is_registered_and_reaches_only_validated_names() {
         assert!(!line.contains("dir:") && !line.contains("path:"), "path-taking command: {line}");
     }
 }
+
+#[test]
+fn the_source_app_of_a_screenshot_comes_from_its_stem() {
+    assert_eq!(screenshot_source_app("Screenshot-Code-2026-01-31_10-00-59").as_deref(), Some("Code"));
+    assert_eq!(screenshot_source_app("Screenshot-My-Editor-2026-01-31_10-00-59").as_deref(), Some("My-Editor"), "a hyphenated app name stays whole");
+    assert_eq!(screenshot_source_app("Screenshot-Übersicht-2026-01-31_10-00-59").as_deref(), Some("Übersicht"));
+    assert_eq!(screenshot_source_app("Screenshot-2026-01-31_10-00-59"), None, "no app: only the stamp");
+    assert_eq!(screenshot_source_app("Screenshot--2026-01-31_10-00-59"), None, "an empty app is no app");
+    for foreign in [
+        "Screenshot-holiday", "Screenshot-Code", "Screenshot-Code-2026-01-31", "Screenshot-Code-2026-01-31_10-00",
+        "Screenshot-Code-2026-01-31_10-00-5x", "photo", "Screenshot", "Screenshot-é",
+    ] {
+        assert_eq!(screenshot_source_app(foreign), None, "{foreign:?}");
+    }
+}
+
+#[test]
+fn only_screenshot_rows_carry_a_source_app() {
+    let dir = scratch("app-field");
+    fs::write(dir.join("Screenshot-Code-2026-01-31_10-00-59.png"), b"x").unwrap();
+    fs::write(dir.join("Screenshot-2026-01-31_10-00-59.png"), b"x").unwrap();
+    fs::write(dir.join("rec-a.mp4"), b"x").unwrap();
+    let mut shots = list_media_in(MediaKind::Screenshots, &dir);
+    shots.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(shots.iter().map(|f| f.app.as_deref()).collect::<Vec<_>>(), [None, Some("Code")]);
+    assert!(list_media_in(MediaKind::Recordings, &dir).iter().all(|f| f.app.is_none()));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_discarded_screenshots_row_counts_only_the_holding_folder() {
+    let dir = scratch("shot-row");
+    fs::write(dir.join("Screenshot-live.png"), b"123").unwrap();
+    assert_eq!(media_discard_in(MediaKind::Screenshots, &dir, &["Screenshot-live.png".to_string()]), 1);
+    fs::write(dir.join("Screenshot-kept.png"), b"12345").unwrap();
+    let row = discarded_screenshots_row(&dir);
+    assert_eq!(row.key, "discarded_screenshots");
+    assert_eq!((row.count, row.bytes), (1, 3));
+    assert!(row.path.ends_with("verworfen"), "{}", row.path);
+    assert_eq!(discarded_screenshots_row(&dir.join("nothing-here")).count, 0);
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -12,6 +12,10 @@ export function openVideoCleanup() {
   return invoke("open_media_manager", { kind: "recordings" }).catch((e) => errToast(e));
 }
 
+export function openScreenshotManager() {
+  return invoke("open_media_manager", { kind: "screenshots" }).catch((e) => errToast(e));
+}
+
 // What the manager window asks of this window: export the files it selected through the
 // batch dialog here, and refresh the folder readout after it moved something to or from the
 // holding folder.

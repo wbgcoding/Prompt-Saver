@@ -75,6 +75,30 @@ pub(crate) struct MediaFile {
     pub(crate) size: u64,
     pub(crate) modified_ms: u64,
     pub(crate) ext: String,
+    // The app a screenshot was taken of, read from its name; None for recordings and for a
+    // screenshot whose name carries no app.
+    pub(crate) app: Option<String>,
+}
+
+// True for exactly "YYYY-MM-DD_HH-MM-SS" (the stamp every screenshot name ends with).
+fn is_shot_stamp(s: &str) -> bool {
+    const SHAPE: &[u8; 19] = b"dddd-dd-dd_dd-dd-dd";
+    s.len() == SHAPE.len()
+        && s.bytes().zip(SHAPE).all(|(c, shape)| if *shape == b'd' { c.is_ascii_digit() } else { c == *shape })
+}
+
+// The app a screenshot was taken of: a name is "Screenshot-<app>-<stamp>" or, without an app,
+// "Screenshot-<stamp>". Everything between the prefix and the trailing stamp is the app, so an
+// app name with hyphens stays whole. None for a name that does not end in a stamp.
+pub(crate) fn screenshot_source_app(stem: &str) -> Option<String> {
+    let rest = stem.strip_prefix("Screenshot-")?;
+    let cut = rest.len().checked_sub(19).filter(|&i| rest.is_char_boundary(i))?;
+    let (head, stamp) = rest.split_at(cut);
+    if !is_shot_stamp(stamp) {
+        return None;
+    }
+    let app = head.strip_suffix('-')?;
+    (!app.is_empty()).then(|| app.to_string())
 }
 
 fn modified_ms_of(meta: &fs::Metadata) -> u64 {
@@ -94,7 +118,11 @@ fn files_in(kind: MediaKind, dir: &Path) -> Vec<MediaFile> {
             continue;
         }
         let ext = Path::new(&name).extension().and_then(|x| x.to_str()).unwrap_or("").to_ascii_lowercase();
-        out.push(MediaFile { path: e.path().to_string_lossy().to_string(), size: meta.len(), modified_ms: modified_ms_of(&meta), ext, name });
+        let app = match kind {
+            MediaKind::Screenshots => Path::new(&name).file_stem().and_then(|s| s.to_str()).and_then(screenshot_source_app),
+            MediaKind::Recordings => None,
+        };
+        out.push(MediaFile { path: e.path().to_string_lossy().to_string(), size: meta.len(), modified_ms: modified_ms_of(&meta), ext, app, name });
     }
     out
 }

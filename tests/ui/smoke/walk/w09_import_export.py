@@ -200,6 +200,20 @@ SECTION = """\
           }
         }
       }
+      // 82-folder: the screenshot folder row carries a button into the screenshots manager.
+      {
+        const shotRow = await pathFieldRow('Screenshot folder');
+        const shotBtn = shotRow && shotRow.querySelector('.path-shot-manage button');
+        if (!shotBtn) {
+          out.errors.push('82: the screenshot folder row has no manage button');
+        } else {
+          window.__SMOKE_ARGS__ = [];
+          shotBtn.click();
+          await sleep(200);
+          const shotCall = window.__SMOKE_ARGS__.find(([c]) => c === 'open_media_manager');
+          if (!shotCall || shotCall[1].kind !== 'screenshots') out.errors.push('82: the screenshot folder button did not open the media manager on the screenshots');
+        }
+      }
       const tab0b = document.querySelector('#expert-tabs-bar .expert-tab');
       if (tab0b) { tab0b.click(); await sleep(150); }
       await click('expert-back');

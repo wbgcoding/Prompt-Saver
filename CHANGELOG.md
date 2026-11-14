@@ -17,6 +17,10 @@ saving, backups, recordings, the editors and the installer.
   recording in the video editor, double click plays it, a right-click menu shows it in its folder or
   copies it, and several selected recordings can be exported or deleted together. Deleted files wait
   in "Recently discarded" and can be restored. This replaces the old "Clean up" dialog.
+- **Screenshots manager.** The same window also lists the screenshots you saved, with the app each
+  one was taken of. Open it from the screenshot button's right-click menu, the screenshot folder row
+  in the Expert menu or the screenshots row of the storage overview in the backup manager. Clicking a
+  screenshot opens it in the screenshot editor; deleted ones wait in "Recently discarded".
 - **French.** French is now available as a UI language, including the installer,
   the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice
