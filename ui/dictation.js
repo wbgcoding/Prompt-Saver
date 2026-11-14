@@ -499,9 +499,10 @@ export async function startVoice(target, btn) {
   voiceResolvedLang = lang || voiceResolvedLang;
 }
 export async function stopVoice() {
-  if (voiceState === "arming" && voiceSessionId === null) {
-    // Nothing to send yet: voice_start has not resolved with an id. Mark the cancel and let
-    // startVoice() finish the job when it does.
+  if (voiceState !== "idle" && voiceSessionId === null) {
+    // Nothing to send yet: voice_start has not resolved with an id (a first partial may already
+    // have flipped the state to listening). Mark the cancel and let startVoice() finish the job
+    // when it does.
     voiceArmCancelled = true;
     return;
   }
