@@ -1222,3 +1222,20 @@ fn a_refused_import_reloads_the_pick_history_from_the_restored_settings() {
     let reload = rollback.find("load_pick_history(&store.settings)").expect("the rollback must reload the pick history");
     assert!(reload > restore, "the reload reads the restored settings");
 }
+
+#[test]
+fn a_restore_drops_the_fallback_files_of_the_halves_it_replaced() {
+    let dir = std::env::temp_dir().join(format!("{}-test-restore-fallback", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (scope, prompts_gone, settings_gone) in [("all", true, true), ("data", true, false), ("settings", false, true)] {
+        assert!(write_sealed_json(&dir.join("prompts.json"), &vec![test_prompt("stale")]));
+        assert!(write_sealed_json(&dir.join("settings.json"), &Settings::default()));
+        drop_restored_fallbacks(&dir, scope);
+        assert_eq!(!dir.join("prompts.json").exists(), prompts_gone, "prompts.json after scope {scope}");
+        assert_eq!(!dir.join("settings.json").exists(), settings_gone, "settings.json after scope {scope}");
+        let _ = std::fs::remove_file(dir.join("prompts.json"));
+        let _ = std::fs::remove_file(dir.join("settings.json"));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
