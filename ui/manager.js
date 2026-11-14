@@ -435,10 +435,12 @@ function setThumbImage(thumb, url) {
 }
 
 // No poster could be made (no ffmpeg, or a format it cannot read): show what the webview
-// can draw by itself, else a film glyph.
+// can draw by itself, else a film glyph. Only the recording folder is in the asset scope; the
+// screenshot folder is not (and stays out on purpose), so a screenshot whose poster failed gets
+// the glyph instead of an asset URL that would be denied.
 function setThumbFallback(thumb, f) {
   thumb.querySelector("svg")?.remove();
-  const src = convertFileSrc(f.path);
+  const src = kind === "recordings" ? convertFileSrc(f.path) : "";
   if (kind === "recordings" && VIDEO_TAG_EXTS.has(f.ext)) {
     const v = document.createElement("video");
     v.className = "mm-img";
@@ -447,7 +449,7 @@ function setThumbFallback(thumb, f) {
     v.src = `${src}#t=0.1`;
     thumb.prepend(v);
     thumb.classList.remove("mm-thumb-empty");
-  } else if (IMG_TAG_EXTS.has(f.ext)) {
+  } else if (kind === "recordings" && IMG_TAG_EXTS.has(f.ext)) {
     const img = document.createElement("img");
     img.className = "mm-img";
     img.alt = "";
