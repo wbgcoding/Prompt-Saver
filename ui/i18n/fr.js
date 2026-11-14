@@ -502,6 +502,7 @@ export default {
     recMore: "Plus…",
     recChangeFolder: "Changer le dossier d'enregistrement…",
     recSaved: "Enregistrement sauvegardé",
+    recPrevSaved: "L'enregistrement précédent a été sauvegardé.",
     recClosedAfterCopy: "Copié, mais pas enregistré : la fermeture de cette fenêtre supprime le fichier",
     flagRecSweepBroken: "Supprimer automatiquement les enregistrements défectueux",
     tipRecSweepBroken: "Un enregistrement qui ne s'est jamais arrêté correctement (plantage, arrêt forcé) n'a pas de piste vidéo exploitable et est supprimé automatiquement dès qu'il dépasse le délai de grâce ci-dessous. Un enregistrement en cours n'est jamais touché.",

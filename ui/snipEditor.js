@@ -551,7 +551,7 @@ export function initSnipEditor() {
     SE.rawCanvas = rawBaked;
     SE.w = targetW;
     SE.h = targetH;
-    SE.ops = keptOps;
+    SE.ops = keptOps.slice(); // the op keeps keptOps as its own snapshot, never the live list
     snipEditBaseCv.width = targetW;
     snipEditBaseCv.height = targetH;
     snipEditLiveCv.width = targetW;

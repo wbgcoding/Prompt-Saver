@@ -526,6 +526,7 @@ export default {
     recMore: "Daha fazla…",
     recChangeFolder: "Kayıt klasörünü değiştir…",
     recSaved: "Kayıt kaydedildi",
+    recPrevSaved: "Önceki kayıt kaydedildi.",
     recClosedAfterCopy: "Kopyalandı ancak kaydedilmedi: bu pencere kapatılırsa dosya silinir",
     flagRecSweepBroken: "Bozuk kayıtları otomatik kaldır",
     tipRecSweepBroken: "Normal durdurma sürecine ulaşmamış bir kaydın (çökme veya zorla kapatma nedeniyle) kullanılabilir video parçası olmaz ve aşağıdaki bekleme süresinden sonra otomatik olarak silinir. Süren bir kayda asla dokunulmaz.",

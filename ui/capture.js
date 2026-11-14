@@ -480,6 +480,26 @@ export function bindCapture() {
       if (gen === recGen) setRecActionsBusy(false);
     }
   }
+  // A new result arriving while the dialog still shows an undecided take would overwrite that
+  // take's path and orphan the file. The old take is saved like a plain Save instead (no
+  // attach), after its running crop or conversion finished for that very file.
+  let recHandoff = Promise.resolve();
+  async function keepUndecidedRecording() {
+    const undecided = () => !recModal.classList.contains("hidden") && pendingRecPath && !recSavedOrAttached;
+    if (!undecided()) return;
+    const gen = recGen;
+    await recWork.catch(() => {});
+    // The user may have decided meanwhile (closed, saved, attached) or another action is moving
+    // the file right now: then that action owns the take.
+    if (gen !== recGen || !undecided() || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
+    try {
+      await invoke("save_recording_now", { srcPath: pendingRecPath });
+      recSavedOrAttached = true;
+      toast(t("recPrevSaved"));
+    } catch (err) {
+      errToast(err);
+    }
+  }
   async function convertRecording(rawPath, gen, format, lossless, converting) {
     if (!converting) {
       recPreview.classList.remove("hidden");
@@ -573,7 +593,16 @@ export function bindCapture() {
     // "Finish and continue" split this recording into several files. The
     // dialog opens the LAST one; the backend keeps the earlier parts and they
     // follow it on Save, Attach or Edit and go to the discard folder with it.
-    if (path) recWork = openRecModal(path, !!e.payload?.needs_crop);
+    if (path) {
+      // Strictly one result at a time: a take still waiting for a decision is kept as a normal
+      // save first, and a third result queues behind the second instead of racing it.
+      const mine = recHandoff.catch(() => {}).then(async () => {
+        await keepUndecidedRecording();
+        recWork = openRecModal(path, !!e.payload?.needs_crop);
+      });
+      recHandoff = mine;
+      await mine.catch(() => {});
+    }
     // The "window size" canvas default cut off part of the picture because the window grew
     // mid-recording: offer, once per occurrence and only while the notice is on, to switch the
     // canvas to every display. Shown one frame after the result menu is visible (it opens at

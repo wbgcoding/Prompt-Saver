@@ -526,6 +526,7 @@ export default {
     recMore: "Mai multe…",
     recChangeFolder: "Schimbă folderul de salvare…",
     recSaved: "Înregistrare salvată",
+    recPrevSaved: "Înregistrarea anterioară a fost salvată.",
     recClosedAfterCopy: "Copiată, dar nesalvată: închiderea acestei ferestre șterge fișierul",
     flagRecSweepBroken: "Elimină automat înregistrările deteriorate",
     tipRecSweepBroken: "O înregistrare care nu a ajuns la procedura normală de oprire (din cauza unei erori sau a unei opriri forțate) nu are o pistă video utilizabilă și este ștearsă automat după expirarea perioadei de grație de mai jos. O înregistrare în curs nu este afectată niciodată.",

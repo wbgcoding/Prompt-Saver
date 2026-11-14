@@ -157,6 +157,7 @@ export async function loadRecording(path, originDir, overlayPath) {
   // actually opened: destPath() already prefers this folder for the "Save" default,
   // and this note says why the working file's own name looks unfamiliar.
   VE.originDir = originDir || "";
+  VE.overlayPath = overlayPath || "";
   // A fresh editor window can get here before loadTexts() has landed, and t() would then answer
   // the raw key, so the note waits for the texts (and drops out if another source replaced this one).
   if (VE.originDir) Promise.resolve(TXT_READY ? null : textsReady).then(() => { if (VE.loadGen === myGen) toast(t("openedCopyNote")); });
