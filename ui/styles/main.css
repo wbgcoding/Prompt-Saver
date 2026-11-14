@@ -2306,6 +2306,8 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
      image will actually have -- inherit picked up the app's own UI font here,
      which is not what gets drawn. */
   font-family: sans-serif;
+  /* The outline is drawn under the letters, like the canvas does. */
+  paint-order: stroke fill;
 }
 .snip-edit-measure {
   position: absolute;

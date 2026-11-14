@@ -1111,7 +1111,8 @@ def run(browser, tmp):
         ti.value = 'Hi'; ti.dispatchEvent(new Event('input', { bubbles: true })); await sleep(40);
         const cs = getComputedStyle(ti), tr = ti.getBoundingClientRect();
         if (tr.width >= 80) errs.push('979: the box for "Hi" is ' + Math.round(tr.width) + ' px wide, expected under 80');
-        if (cs.backgroundColor !== 'rgb(255, 255, 255)' || cs.color !== 'rgb(0, 0, 0)') errs.push('979: the box is ' + cs.color + ' on ' + cs.backgroundColor + ', expected black on white');
+        // The input shows the text tool's background (white or none, none being transparent), so either is right here.
+        if (!['rgb(255, 255, 255)', 'rgba(0, 0, 0, 0)'].includes(cs.backgroundColor) || cs.color !== 'rgb(0, 0, 0)') errs.push('979: the box is ' + cs.color + ' on ' + cs.backgroundColor + ', expected black on white or transparent');
         const fontPx = parseFloat(cs.fontSize);
         if (Math.abs(tr.height - (fontPx * 1.25 + 2)) > 0.6) errs.push('979: the box is ' + tr.height + ' px high, expected ' + (fontPx * 1.25 + 2));
         const boxX = (tr.left + 1 + 4 - cr.left) / z, boxY = (tr.top + 1 - cr.top) / z;

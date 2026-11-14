@@ -1,5 +1,5 @@
 import { attachSelectPicker } from "./selectpop.js";
-import { makeHoldOrTapToggle, numberField, numPopClosedByEscape, trapTabWithin } from "./floatShared.js";
+import { contrastTextColor, makeHoldOrTapToggle, numberField, numPopClosedByEscape, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { $, closeColorPop, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
@@ -167,7 +167,7 @@ export function initSnipEditor() {
     active: false, img: null, rawCanvas: null, w: 0, h: 0,
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
-    cropRect: null, cropHintDismissed: false, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
+    cropRect: null, cropHintDismissed: false, lastNudged: null, eyedropArm: null, textEdit: null, textStyleRec: null, selOp: null,
     onClose: null, onCancel: null, actions: null, autoSaves: null,
     // rev counts every change to the edits, savedRev the revision last written to a file.
     rev: 0, savedRev: 0,
@@ -691,6 +691,7 @@ export function initSnipEditor() {
     // The selection handles are a separate live-layer drawing keyed to the op and would keep
     // showing the pre-nudge position and size.
     if (SE.selOp === op) snipEditDrawShapeSelectionLive();
+    if (op.tool === "text" && SE.tool === "text") snipEditShowTextSelection();
     // The crop tool's live overlay is drawn from SE.cropRect, not the committed op; without this
     // a nudged crop would export a region the on-screen handles never showed.
     if (op.tool === "crop" && op.rect) {
@@ -1135,6 +1136,7 @@ export function initSnipEditor() {
   function snipEditPlaceTextInput(pt, fontPx) {
     snipEditTextInput.style.left = `${pt.x * snipEditScale() - 5}px`;
     snipEditTextInput.style.top = `${pt.y * snipEditScale() - 1}px`;
+    snipEditStyleTextInput();
     snipEditTextInput.style.fontSize = `${fontPx * snipEditScale()}px`;
     snipEditTextInput.classList.remove("hidden");
     snipEditFitTextInput();
@@ -1143,7 +1145,11 @@ export function initSnipEditor() {
   function snipEditOpenTextInput(pt) {
     const ts = snipEditToolState("text");
     SE.textEdit = { point: pt };
+    SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     snipEditTextInput.value = "";
+    snipEditClearLive();
+    snipEditStyleTextInput();
     snipEditPlaceTextInput(pt, ts.fontPx);
   }
   // Opens a placed text box again: the box is not drawn while its input is up, and the size and
@@ -1151,28 +1157,110 @@ export function initSnipEditor() {
   function snipEditEditText(op) {
     if (!op || op.tool !== "text" || !SE.ops.includes(op)) return;
     snipEditFinishTextIfOpen();
-    SE.textEdit = { point: op.point, op, before: { text: op.text, color: op.color, fontPx: op.fontPx } };
+    SE.textEdit = {
+      point: op.point, op,
+      before: { text: op.text, color: op.color, fontPx: op.fontPx, back: op.back, outlinePx: op.outlinePx },
+    };
     op.editing = true;
+    SE.lastNudged = op;
     snipEditRedrawBase();
-    if (SE.tool === "text") {
-      const ts = snipEditToolState("text");
-      ts.fontPx = op.fontPx;
-      ts.color = op.color;
-      snipEditRenderContext();
-    }
     snipEditTextInput.value = op.text;
+    // The text tool's panel shows (and changes) this box, so entering the tool follows the box.
+    if (SE.tool !== "text") snipEditSetTool("text");
+    else { snipEditSyncTextToolFrom(op); snipEditRenderContext(); }
+    snipEditUpdateNudgeHint();
     snipEditPlaceTextInput(op.point, op.fontPx);
     snipEditTextInput.select();
   }
-  // The text tool's size and colour fields act on the box being edited, live.
-  function snipEditTextToolChanged() {
-    const op = SE.textEdit && SE.textEdit.op;
-    if (!op || SE.tool !== "text") return;
+  // The text the tool panel acts on: the box being edited, or the one just placed or grabbed.
+  // While NEW text is typed there is no box yet, so the panel only styles the input.
+  function snipEditTextTarget() {
+    if (SE.textEdit) return SE.textEdit.op || null;
+    const op = SE.lastNudged;
+    return op && op.tool === "text" && SE.ops.includes(op) ? op : null;
+  }
+  // The panel shows the values of the box it acts on.
+  function snipEditSyncTextToolFrom(op) {
+    if (!op) return;
     const ts = snipEditToolState("text");
-    op.fontPx = ts.fontPx;
-    op.color = ts.color;
-    snipEditTextInput.style.fontSize = `${op.fontPx * snipEditScale()}px`;
-    snipEditFitTextInput();
+    ts.fontPx = op.fontPx;
+    ts.color = op.color;
+    ts.back = op.back || "none";
+    ts.outlinePx = op.outlinePx ?? ts.outlinePx;
+  }
+  // The input looks like the drawn text will: same size, colour, background and outline
+  // (snipEditDrawTextOp), so a change in the panel is visible while typing.
+  function snipEditTextInputStyle(look, scale) {
+    const outline = look.back === "outline";
+    return {
+      fontSize: `${look.fontPx * scale}px`,
+      color: look.color,
+      background: look.back === "white" ? "#fff" : look.back === "plate" ? "rgba(0,0,0,0.45)" : "transparent",
+      webkitTextStroke: outline ? `${(look.outlinePx || 3) * scale}px ${contrastTextColor(look.color)}` : "0",
+      textShadow: look.back === "white" ? "none" : "1px 1px 3px rgba(0,0,0,0.6)",
+    };
+  }
+  function snipEditStyleTextInput() {
+    const op = SE.textEdit && SE.textEdit.op;
+    const look = op || snipEditToolState("text");
+    Object.assign(snipEditTextInput.style, snipEditTextInputStyle(look, snipEditScale()));
+  }
+  // The text tool's fields act on the box being typed (live, no record: the commit makes one),
+  // or on the selected box (one undo record per change, a run of the same field coalesced).
+  function snipEditTextToolChanged() {
+    if (SE.tool !== "text") return;
+    const ts = snipEditToolState("text");
+    const edit = SE.textEdit;
+    if (edit) {
+      const op = edit.op;
+      if (op) {
+        op.fontPx = ts.fontPx;
+        op.color = ts.color;
+        op.back = ts.back;
+        op.outlinePx = ts.outlinePx;
+      }
+      snipEditStyleTextInput();
+      snipEditFitTextInput();
+      return;
+    }
+    const op = snipEditTextTarget();
+    if (!op) return;
+    const fields = ["fontPx", "color", "back", "outlinePx"];
+    const changed = fields.filter((f) => (f === "back" ? op.back || "none" : f === "outlinePx" ? op.outlinePx ?? ts.outlinePx : op[f]) !== ts[f]);
+    if (!changed.length) return;
+    const before = { text: op.text, color: op.color, fontPx: op.fontPx, back: op.back, outlinePx: op.outlinePx };
+    for (const f of changed) op[f] = ts[f];
+    const after = { text: op.text, color: op.color, fontPx: op.fontPx, back: op.back, outlinePx: op.outlinePx };
+    const now = Date.now();
+    const run = SE.textStyleRec;
+    if (run && run.op === op && SE.ops[SE.ops.length - 1] === run.rec && changed.length === 1 && run.field === changed[0] && now - run.at < 800) {
+      // Dragging a stepper or typing digits: one undo step for the whole run.
+      run.rec.after = after;
+      run.at = now;
+      snipEditRedrawBase();
+      snipEditNoteChange();
+    } else {
+      const rec = { tool: "edit", kind: "text", op, before, after };
+      snipEditPushOp(rec, op);
+      SE.textStyleRec = changed.length === 1 ? { rec, op, field: changed[0], at: now } : null;
+    }
+    snipEditShowTextSelection();
+  }
+  // A dashed frame around the selected (not edited) text on the live layer; the text itself is
+  // already on the base canvas.
+  function snipEditShowTextSelection() {
+    snipEditClearLive();
+    const op = SE.tool === "text" && !SE.textEdit ? snipEditTextTarget() : null;
+    if (!op) return;
+    const w = snipEditMeasureTextWidth(op);
+    const k = 1 / snipEditScale();
+    const ctx = snipEditLiveCtx;
+    ctx.save();
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2563eb";
+    ctx.lineWidth = k;
+    ctx.setLineDash([4 * k, 3 * k]);
+    ctx.strokeRect(op.point.x - 5 * k, op.point.y - 3 * k, w + 10 * k, op.fontPx * 1.25 + 6 * k);
+    ctx.restore();
   }
   // The box is as wide as the typed text (+12 px, at least 40 px).
   function snipEditFitTextInput() {
@@ -1196,17 +1284,20 @@ export function initSnipEditor() {
       if (!typed.trim()) {
         Object.assign(op, before); // the removal undoes back to the box as it was
         snipEditRemoveOp(op);
-      } else if (typed !== before.text || op.color !== before.color || op.fontPx !== before.fontPx) {
+      } else if (typed !== before.text || op.color !== before.color || op.fontPx !== before.fontPx
+        || op.back !== before.back || op.outlinePx !== before.outlinePx) {
         op.text = typed;
-        snipEditPushOp({ tool: "edit", kind: "text", op, before, after: { text: typed, color: op.color, fontPx: op.fontPx } }, op);
+        snipEditPushOp({ tool: "edit", kind: "text", op, before, after: { text: typed, color: op.color, fontPx: op.fontPx, back: op.back, outlinePx: op.outlinePx } }, op);
       } else {
         snipEditRedrawBase();
       }
+      snipEditShowTextSelection();
       return;
     }
     if (!typed.trim()) return; // empty input -> discard the operation
     const ts = snipEditToolState("text");
     snipEditPushOp({ tool: "text", point, text: typed, color: ts.color, fontPx: ts.fontPx, back: ts.back, outlinePx: ts.outlinePx });
+    snipEditShowTextSelection();
   }
   function snipEditCancelTextInput() {
     const { op, before } = SE.textEdit || {};
@@ -1227,6 +1318,9 @@ export function initSnipEditor() {
       // The pointer press cleared the nudge target; a grabbed text box is the target again.
       SE.lastNudged = hit;
       snipEditUpdateNudgeHint();
+      snipEditSyncTextToolFrom(hit);
+      snipEditRenderContext();
+      snipEditShowTextSelection();
       SE.drag = { kind: "text-move", op: hit, dx: pt.x - hit.point.x, dy: pt.y - hit.point.y };
       return;
     }
@@ -1296,8 +1390,8 @@ export function initSnipEditor() {
     const sw = document.createElement("div");
     sw.className = "swatches";
     buildSwatches(sw, ts.color,
-      (hex) => { ts.color = hex; snipEditRenderContext(); closeSnipColorPop(); },
-      (anchor2, cur) => openColorPop(anchor2, cur, (hex) => { ts.color = hex; snipEditRenderContext(); }),
+      (hex) => { ts.color = hex; if (tool === "text") snipEditTextToolChanged(); snipEditRenderContext(); closeSnipColorPop(); },
+      (anchor2, cur) => openColorPop(anchor2, cur, (hex) => { ts.color = hex; if (tool === "text") snipEditTextToolChanged(); snipEditRenderContext(); }),
       { noNone: true });
     snipColorPop.appendChild(sw);
     snipColorPop.classList.remove("hidden");
@@ -1393,6 +1487,15 @@ export function initSnipEditor() {
   // The tool's controls live in a panel under its button. Only the tools with fields
   // get one; the hand and crop tools have nothing to show.
   const SNIP_CTX_INSIDE = "#snip-edit-context, .snip-color-pop, .color-pop, .select-pop, .numfield-pop";
+  const SNIP_TEXT_TOOL_BTN = '#snip-edit-tools [data-tool="text"]';
+  // Reaching for the panel (or the text tool button that opens it) keeps the text open; it ends
+  // with the next press on the canvas, Enter or a tool change.
+  function snipEditOnTextBlur(e) {
+    if (!SE.textEdit) return;
+    const to = e.relatedTarget;
+    if (to && to.closest && (to.closest(SNIP_CTX_INSIDE) || to.closest(SNIP_TEXT_TOOL_BTN))) return;
+    snipEditCommitTextInput();
+  }
   const snipEditToolHasPanel = (tool) => tool !== "hand" && tool !== "crop";
   function snipEditContextIsOpen() { return !snipEditContextEl.classList.contains("hidden"); }
   function closeSnipEditContext() {
@@ -1422,7 +1525,7 @@ export function initSnipEditor() {
     const tool = SE.tool;
     if (!snipEditToolHasPanel(tool)) { closeSnipEditContext(); return; }
     const ts = snipEditToolState(tool);
-    snipEditTextToolChanged();
+    if (tool === "text") snipEditSyncTextToolFrom(snipEditTextTarget());
     const hasWidth = ["pen", "marker", "line", "arrow", "rect", "ellipse", "step"].includes(tool);
     if (hasWidth) box.appendChild(snipEditBuildWidthField(tool, ts));
     if (hasWidth || tool === "text") box.appendChild(snipEditBuildColorField(tool, ts));
@@ -1433,9 +1536,9 @@ export function initSnipEditor() {
       box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; snipRememberSize("text", "fontPx", v); snipEditTextToolChanged(); }, [12, 16, 24, 32, 48, 64, 96]));
       box.appendChild(snipEditBuildSelectField(t("snipEditTextBack"), ts.back, [
         ["none", t("optSnipTextBackNone")], ["white", t("optSnipTextBackWhite")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")],
-      ], (v) => { ts.back = v; snipEditRenderContext(); }));
+      ], (v) => { ts.back = v; snipEditTextToolChanged(); snipEditRenderContext(); }));
       if (ts.back === "outline") {
-        box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; snipRememberSize("text", "outlinePx", v); }));
+        box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; snipRememberSize("text", "outlinePx", v); snipEditTextToolChanged(); }));
       }
     }
     if (tool === "pixelate") {
@@ -1486,11 +1589,15 @@ export function initSnipEditor() {
   }
   function snipEditSetTool(tool) {
     if (SE.drag) return;
-    snipEditFinishTextIfOpen();
+    // Entering the text tool while a text is being edited or selected keeps it (the edit button
+    // opens the box and then switches here).
+    const keepText = tool === "text" && !!snipEditTextTarget();
+    if (!keepText) snipEditFinishTextIfOpen();
     SE.eyedropArm = null;
     closeSnipEditContext();
     SE.tool = tool;
-    SE.lastNudged = null;
+    if (keepText) snipEditSyncTextToolFrom(snipEditTextTarget());
+    else SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditClearLive();
     // Clear a crop-hover cursor left from the previous tool: an inline style outranks the
@@ -1504,6 +1611,7 @@ export function initSnipEditor() {
     snipEditOpenContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
     snipRememberTool(tool);
+    if (keepText) snipEditShowTextSelection();
   }
 
   // ---- live previews for the currently-dragging tool (top canvas only) ----
@@ -1663,6 +1771,7 @@ export function initSnipEditor() {
     const pt0 = snipEditToImage(e);
     if (SE.eyedropArm) {
       snipEditToolState(SE.eyedropArm).color = snipEditGetPixelColor(pt0);
+      if (SE.eyedropArm === "text") snipEditTextToolChanged();
       SE.eyedropArm = null;
       snipEditRenderContext();
       return;
@@ -1806,6 +1915,7 @@ export function initSnipEditor() {
     // snipEditClearLive() wiped the selection handles that a plain click (a "shape-move" with no
     // movement) painted on mousedown; redraw them so the selection stays visible.
     if (SE.selOp && SE.selOp.tool === SE.tool) snipEditDrawShapeSelectionLive();
+    if (SE.tool === "text") snipEditShowTextSelection();
   }
   snipEditLiveCv.addEventListener("pointerdown", snipEditOnPointerDown);
   snipEditLiveCv.addEventListener("pointermove", snipEditOnPointerMove);
@@ -1845,11 +1955,7 @@ export function initSnipEditor() {
   snipEditTextInput.addEventListener("input", snipEditFitTextInput);
   // Reaching for the size or colour field of an open edit keeps the edit open; it ends with the
   // next press on the canvas, Enter or a tool change.
-  snipEditTextInput.addEventListener("blur", (e) => {
-    if (!SE.textEdit) return;
-    if (SE.textEdit.op && e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(SNIP_CTX_INSIDE)) return;
-    snipEditCommitTextInput();
-  });
+  snipEditTextInput.addEventListener("blur", snipEditOnTextBlur);
   snipEditLiveCv.addEventListener("dblclick", (e) => {
     if (!SE.active || SE.spaceDown || SE.tool === "hand" || SE.panState) return;
     const hit = snipEditHitTestText(snipEditToImage(e));

@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipsel`, `snipcrop`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipsel`, `snipcrop`, `sniptext`, `sniptextsel`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -160,6 +160,14 @@ ACTS = {
                 "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
                 "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
                 "await sleep(200); const ti = $('snip-edit-text-input'); ti.value = 'Hi'; ti.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200);",
+    # A placed text, committed with Enter: selected, with a frame around it and its values in the open panel.
+    "sniptextsel": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
+                   "const xv = $('snip-edit-live'); const xr = xv.getBoundingClientRect();"
+                   "xv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: xr.left + 200, clientY: xr.top + 120 }));"
+                   "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: xr.left + 200, clientY: xr.top + 120 }));"
+                   "await sleep(200); const xi = $('snip-edit-text-input'); xi.value = 'Hi there'; xi.dispatchEvent(new Event('input', { bubbles: true }));"
+                   "xi.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(200);"
+                   "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);",
     # The composer with a 12 line prompt typed in: the tool buttons stack into rows beside the tall box.
     "composer_tall": "const core = await import('./core.js'); core.inputEl.value = Array.from({ length: 12 }, (_, i) => 'Line ' + (i + 1) + ' of a long prompt').join('\\n');"
                     "core.autoGrow(core.inputEl); await sleep(300);",
@@ -170,7 +178,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
-    "@snip": ["snipedit", "snipdraw", "snipsel", "snipcrop", "sniptext"],
+    "@snip": ["snipedit", "snipdraw", "snipsel", "snipcrop", "sniptext", "sniptextsel"],
     "@composer": ["main", "composer_tall"],
 }
 

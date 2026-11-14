@@ -552,7 +552,12 @@ an outline, so the text stays readable on any background; black text on a
 white box is the default, and the text box in the editor is only as wide as
 what you type. An expert setting
 picks the outline width, and its color, black or white, follows the text
-color automatically for the best contrast.
+color automatically for the best contrast. While you type, the text box shows
+the chosen size, color, background and outline, and changing them in the tool
+panel keeps the text open. Click a placed text to select it: the panel then shows
+its values, and every change you make there applies to that text and can be
+undone (a quick series of size steps is one undo step). Double-click a text to
+edit it again.
 
 A selected shape (screenshot editor) or overlay (video editor) can be nudged
 with the arrow keys, a step at a time; holding Ctrl changes its size instead
@@ -1386,7 +1391,12 @@ durchscheinenden Platte oder einem Umriss, damit der Text auf jedem Untergrund
 lesbar bleibt; Vorgabe ist schwarze Schrift auf einem weißen Feld, und das
 Textfeld im Editor ist nur so breit wie das, was du tippst. Eine Expertenzeile stellt die Umrissbreite ein, seine
 Farbe, schwarz oder weiß, folgt für den besten Kontrast automatisch der
-Textfarbe.
+Textfarbe. Beim Tippen zeigt das Textfeld die gewählte Größe, Farbe, den
+Hintergrund und den Umriss, und wer sie im Werkzeugfeld ändert, behält den
+Text offen. Ein gesetzter Text lässt sich anklicken und auswählen: Das Feld
+zeigt dann seine Werte, und jede Änderung dort gilt für diesen Text und lässt
+sich rückgängig machen (eine schnelle Reihe von Größenschritten ist ein
+Schritt). Doppelklick auf einen Text bearbeitet ihn erneut.
 
 Eine ausgewählte Form (Screenshot-Editor) oder Überlagerung (Video-Editor)
 lässt sich mit den Pfeiltasten schrittweise verschieben; gedrückt gehaltenes

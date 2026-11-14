@@ -25,6 +25,10 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Editor text follows the tool panel.** While you type a text in the screenshot editor, the box
+  shows the chosen size, colour, background and outline, and using the panel no longer closes it.
+  A selected text takes every change from the panel (size, colour, background, outline) as one
+  undo step per change, and the panel shows the values of the text you select.
 - **Crop tool is easier to spot.** The crop button has a new icon that no longer looks like a close
   button, and a hint under the image explains how to crop until the first drag.
 - **Editor handles sit outside the image.** The handles of the crop frame and of a selected
