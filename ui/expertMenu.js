@@ -2020,16 +2020,15 @@ export async function resetExpertGroup(group, changed, count) {
   renderExpert();
 }
 
-// Mirrors UI_STATE_FLAGS in update.rs.
-const UI_STATE_FLAGS = ["tourSeen", "diagGroupSeeded", "backupListOpen", "storagePanelOpen", "retentionPanelOpen"];
-
 export async function onResetExpert() {
   // The backend wipes every stored flag, demo mode included. A running demo
   // session must stay one (leaving it is the switch's own confirmed restart), so
   // its marker is written back straight after.
   const keep = EXPERT_RESET_KEEP.filter((k) => flag(k));
   const snapshot = { ui_flags: settings.ui_flags, ui_values: settings.ui_values, ui_texts: settings.ui_texts };
-  // UI-state flags (tour seen, open panels) are not expert options: the backend keeps them, so does the mirror.
+  // UI-state flags (tour seen, open panels) are not expert options: the backend keeps them
+  // (UI_STATE_FLAGS in update.rs), so does the mirror.
+  const UI_STATE_FLAGS = ["tourSeen", "diagGroupSeeded", "backupListOpen", "storagePanelOpen", "retentionPanelOpen"];
   const uiState = Object.entries(settings.ui_flags || {}).filter(([k]) => UI_STATE_FLAGS.includes(k));
   settings.ui_flags = Object.fromEntries([...uiState, ...keep.map((k) => [k, true])]);
   settings.ui_values = {};
