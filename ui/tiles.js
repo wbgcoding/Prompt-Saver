@@ -319,9 +319,11 @@ export let imagePaintQueued = false;
 export function scheduleImagePaint() {
   if (imagePaintQueued) return;
   imagePaintQueued = true;
-  setTimeout(() => {
+  const paint = () => {
+    // A drag owns the tiles it moves and a plain drop does not redraw them: the paint stays
+    // pending and is retried until the drag is over.
+    if (drag) { setTimeout(paint, 150); return; }
     imagePaintQueued = false;
-    if (drag) return; // a drag owns the tiles it moves; its end re-renders anyway
     for (const el of document.querySelectorAll(`[data-img-wait]`)) {
       const p = prompts.find((x) => x.id === el.dataset[IMG_WAIT]);
       if (!p || !imageOf(p)) continue;
@@ -336,7 +338,8 @@ export function scheduleImagePaint() {
       }
     }
     fitAllTiles();
-  }, 0);
+  };
+  setTimeout(paint, 0);
 }
 
 export function buildTile(p) {

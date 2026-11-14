@@ -3,6 +3,25 @@ import { $, errToast, EXPERT_ACTIONS, flag, flagState, invoke, modal, modalState
 import { hotkeyClearX, openAllShortcuts } from "./windowChrome.js";
 import { showExpertPage } from "./expertMenu.js";
 
+// The backend parser knows unshifted key names only, while e.key is the character the layout
+// produced (Shift+1 gives "!", AltGr+Q gives "@"). Punctuation keys are named by the Windows
+// virtual-key the browser reports (the key the backend registers); e.code is the fallback.
+const OEM_BY_VK = {
+  186: "Semicolon", 187: "Equal", 188: "Comma", 189: "Minus", 190: "Period", 191: "Slash",
+  192: "Backquote", 219: "BracketLeft", 220: "Backslash", 221: "BracketRight", 222: "Quote",
+};
+const OEM_CODES = new Set(Object.values(OEM_BY_VK));
+// The unshifted key name for a non-letter character key, or "" when the event holds no better name.
+function physicalKeyName(e) {
+  const code = e.code || "";
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (OEM_BY_VK[e.keyCode]) return OEM_BY_VK[e.keyCode];
+  if (OEM_CODES.has(code)) return code;
+  // A letter key under a layout whose letters are not A-Z: the character is no usable key name.
+  if (e.keyCode >= 65 && e.keyCode <= 90) return String.fromCharCode(e.keyCode);
+  return "";
+}
+
 // Build a Tauri accelerator ("CommandOrControl+Shift+P") from a keydown event.
 // Returns null unless at least one modifier plus a real key was pressed.
 export function accelFromEvent(e) {
@@ -19,7 +38,7 @@ export function accelFromEvent(e) {
   // A typed "+" would be split apart by the "+" separator and refused by the backend parser, which
   // names the plus key "Equal" (the same key as "=", Windows VK_OEM_PLUS) or "NumpadAdd".
   else if (key === "+") key = e.code === "NumpadAdd" ? "NumpadAdd" : "Equal";
-  else if (key.length === 1) key = key.toUpperCase();
+  else if (key.length === 1) key = /^[A-Za-z]$/.test(key) ? key.toUpperCase() : physicalKeyName(e) || key.toUpperCase();
   return [...mods, key].join("+");
 }
 
@@ -33,7 +52,10 @@ export const MOD_LABELS = {
   Super: () => "Win", Meta: () => "Win", Command: () => "Win", Cmd: () => "Win",
 };
 // Key names the backend parser spells out that read better as the character on the key.
-const KEY_LABELS = { Equal: "=", NumpadAdd: "Num +" };
+const KEY_LABELS = {
+  Equal: "=", NumpadAdd: "Num +", Semicolon: ";", Comma: ",", Minus: "-", Period: ".", Slash: "/",
+  Backquote: "`", BracketLeft: "[", Backslash: "\\", BracketRight: "]", Quote: "'",
+};
 // Named keys the UI languages spell out (the same strings the shortcut overview uses).
 const KEY_NAME_IDS = { Space: "keySpace", Up: "keyUp", Down: "keyDown", Left: "keyLeft", Right: "keyRight", Home: "keyHome", End: "keyEnd" };
 export function prettyAccel(accel) {

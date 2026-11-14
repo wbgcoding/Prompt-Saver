@@ -151,6 +151,19 @@ export function modalSnapshot() {
   ]);
 }
 
+// Make the stored prompt the unsaved-change baseline of the open editor: the fields it shows
+// then count as edited wherever they differ from it (a recovered crash draft opens that way, so
+// closing it asks before the recovered edits are dropped).
+export function rebaseModalOnStored(p) {
+  try {
+    const base = JSON.parse(modalInitial);
+    base[SNAP_RESTORED.name] = p.name;
+    base[SNAP_RESTORED.text] = p.text;
+    base[SNAP_RESTORED.entries] = (p.variants || []).length ? [p.text, ...p.variants] : [];
+    modalInitial = JSON.stringify(base);
+  } catch { modalInitial = ""; }
+}
+
 // ---- Editor variable helper ----
 // One-line explanation per reserved name, shown as the chip's tooltip.
 export const DYN_TIPS = {
@@ -1334,8 +1347,9 @@ export function confirmDiscardOrProceed(run) {
   confirmDiscardIfDirty().then((ok) => { if (ok) run(); });
 }
 
-export function startCreate() {
-  const text = inputEl.value.trim();
+export function startCreate(dropped) {
+  // Text dropped on the window opens the dialog directly and leaves the composer's own text alone.
+  const text = (typeof dropped === "string" ? dropped : inputEl.value).trim();
   if (!text) return;
   // Carry the composed text into the dialog so it can be reviewed/edited (and
   // previewed as Markdown) before saving.
@@ -2016,12 +2030,7 @@ export function setupDragDrop() {
     const text = e.dataTransfer?.getData("text");
     if (text && !(e.dataTransfer.files && e.dataTransfer.files.length)) {
       e.preventDefault();
-      confirmDiscardOrProceed(() => {
-        inputEl.value = text;
-        autoGrow(inputEl);
-        saveBtn.disabled = !text.trim();
-        startCreate();
-      });
+      confirmDiscardOrProceed(() => startCreate(text));
     }
   });
 }

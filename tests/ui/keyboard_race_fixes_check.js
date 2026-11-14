@@ -243,7 +243,7 @@ later(async () => {
   const sandbox = run("const FOLDER_KEY = 'folder:'; const kbElOf = () => folderTile; let kbFocus = null;\n" + code + "\n;globalThis.walk = (dc, dr, start) => { kbFocus = start; moveKbFocus(dc, dr); return kbFocus; }; globalThis.act = activateKbFocus;", {
     folderTile,
     favView: false, favLayoutMap: () => ({}), layoutOf: () => ({ a: [0, 0], b: [2, 0] }), activeView: () => ({}),
-    gridEl: { querySelectorAll: () => [folderTile] },
+    gridEl: { querySelectorAll: (sel) => (sel === ".tile" ? [{ dataset: { id: "a" } }, { dataset: { id: "b" } }] : [folderTile]) },
     document: { querySelector: () => member },
     focusTile: (id) => focused.push(id),
     folderById: (id) => ({ id }), openTileFolderPop: (f) => opened.push(f.id),

@@ -178,6 +178,9 @@ export function clearKbFocus(fade) {
 // favLayoutMap(), not the active view) plus the grid-folder cells, read from the drawn cells.
 export function kbNavMap() {
   const layout = { ...(favView ? favLayoutMap() : layoutOf(activeView())) };
+  // A placed prompt that is not drawn (an archived one keeps its cell) cannot hold the focus ring.
+  const drawn = new Set([...gridEl.querySelectorAll(".tile")].map((el) => el.dataset.id));
+  for (const id of Object.keys(layout)) if (!drawn.has(id)) delete layout[id];
   if (favView) return layout;
   for (const el of gridEl.querySelectorAll(".folder-tile")) {
     const cell = el.closest(".cell");
