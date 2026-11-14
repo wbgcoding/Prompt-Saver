@@ -25,6 +25,10 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Choose the area before reading an image file.** Right-clicking the text recognition button and
+  picking an image now opens it in a crop view first, so only the area inside the frame is read (the
+  whole image if you leave the frame alone). The Expert menu switch "Choose the area before reading
+  an image file" turns the step off.
 - **Editor text follows the tool panel.** While you type a text in the screenshot editor, the box
   shows the chosen size, colour, background and outline, and using the panel no longer closes it.
   A selected text takes every change from the panel (size, colour, background, outline) as one

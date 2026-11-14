@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipsel`, `snipcrop`, `sniptext`, `sniptextsel`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipsel`, `snipcrop`, `snip_edit_ocr`, `sniptext`, `sniptextsel`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -52,6 +52,16 @@ c.fillStyle = '#222'; c.font = '16px Segoe UI';
 for (let i = 0; i < 30; i++) c.fillText('Sample text line ' + i + ' 0123456789', 20, 30 + i * 25);
 window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'x.png' });
 await sleep(800);
+"""
+# The text recognition crop view: an image file picked with a right-click on the OCR button.
+SNIP_OCR_OPEN = """
+const cv = document.createElement('canvas'); cv.width = 1400; cv.height = 800;
+const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, 1400, 800);
+c.fillStyle = '#222'; c.font = '16px Segoe UI';
+for (let i = 0; i < 30; i++) c.fillText('Sample text line ' + i + ' 0123456789', 20, 30 + i * 25);
+window.__OPEN_EDIT_RESULT__ = { kind: 'image', data_url: cv.toDataURL('image/png') };
+$('ocr-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+await sleep(900);
 """
 EDITOR_TAGS = (
     "const core = await import('./core.js'); const extra = Array.from({ length: 14 }, (_, i) => 'Tag ' + String.fromCharCode(65 + i) + ' sample');"
@@ -144,6 +154,7 @@ ACTS = {
                  "$('expert-back').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     "recresult": "window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' }); await sleep(900);",
     "snipedit": SNIP_OPEN,
+    "snip_edit_ocr": SNIP_OCR_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);"
                 "const dv = $('snip-edit-live'); const dr = dv.getBoundingClientRect();"
                 "const dp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: dr.left + x, clientY: dr.top + y }));"
@@ -178,7 +189,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
-    "@snip": ["snipedit", "snipdraw", "snipsel", "snipcrop", "sniptext", "sniptextsel"],
+    "@snip": ["snipedit", "snip_edit_ocr", "snipdraw", "snipsel", "snipcrop", "sniptext", "sniptextsel"],
     "@composer": ["main", "composer_tall"],
 }
 

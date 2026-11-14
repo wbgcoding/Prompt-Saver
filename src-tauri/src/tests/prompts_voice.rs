@@ -1449,14 +1449,27 @@ fn the_ocr_temp_guard_exists_before_the_png_is_written() {
     }
 }
 
-// The screenshot editor's Recognize text button was removed; its data-URL command must not
-// come back as unused IPC surface that decodes renderer-supplied image data.
+// The data-URL read behind the crop view of an image file: a real picture decodes to pixels,
+// anything else (empty, truncated, not an image, over the size ceiling) is refused before the
+// engine is reached.
 #[test]
-fn the_unused_ocr_image_data_command_is_gone() {
-    assert!(!source!("../ocr_cmds.rs").contains("fn ocr_image_data"));
-    assert!(!source!("../lib.rs").contains("ocr_image_data"));
-    assert!(!include_str!("../../capabilities/default.json").contains("ocr-image-data"));
-    assert!(!include_str!("../../../tests/ui/tauri_stub.js").contains("ocr_image_data"));
+fn ocr_data_url_decode_accepts_a_picture_and_refuses_the_rest() {
+    let img = ocr_decode_data_url(&real_png_data_url()).expect("png decodes");
+    assert_eq!((img.width(), img.height()), (4, 4));
+    let unsupported = Err("unsupported image type".to_string());
+    assert_eq!(ocr_decode_data_url("").map(|i| i.width()), unsupported);
+    assert_eq!(ocr_decode_data_url("data:image/png;base64,AAA").map(|i| i.width()), unsupported);
+    assert_eq!(ocr_decode_data_url("data:text/plain;base64,aGVsbG8=").map(|i| i.width()), unsupported);
+    let oversized = format!("data:image/png;base64,{}", "A".repeat(MAX_OCR_IMAGE_BYTES as usize));
+    assert_eq!(ocr_decode_data_url(&oversized).map(|i| i.width()), unsupported);
+}
+
+// The crop view needs the command in the handler list and the main window's permission.
+#[test]
+fn the_ocr_data_command_is_registered_and_allowed() {
+    assert!(source!("../lib.rs").contains("ocr_cmds::ocr_image_data,"));
+    assert!(include_str!("../../capabilities/default.json").contains("\"allow-ocr-image-data\""));
+    assert!(include_str!("../../../tests/ui/tauri_stub.js").contains("ocr_image_data"));
 }
 
 // Structural fix, no red unit test: a panicking decoder inside the blocking pool cannot be

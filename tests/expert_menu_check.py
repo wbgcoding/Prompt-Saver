@@ -85,6 +85,7 @@ DEPENDENCIES = {
     # right after the screenshot block is list order, not a gating relationship).
     "ocrAutoCopy": "ocr",
     "ocrJoinLines": "ocr",
+    "ocrCropFirst": "ocr",
     "ocrLang": "ocr",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",

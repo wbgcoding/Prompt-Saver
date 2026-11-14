@@ -274,6 +274,7 @@
     "allow-paste-into-previous",
     "allow-ocr-languages",
     "allow-ocr-image",
+    "allow-ocr-image-data",
     "allow-search-image-text",
     "allow-ocr-index-backfill",
     "allow-cancel-ocr-index-backfill",

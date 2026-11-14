@@ -414,6 +414,32 @@ pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: b
     }
 }
 
+// Decode step of ocr_image_data, pure so the size ceiling and the "not a picture" answer are
+// testable without an engine: an oversized or undecodable data URL never reaches recognition.
+pub(crate) fn ocr_decode_data_url(data_url: &str) -> Result<image::RgbaImage, String> {
+    if data_url.is_empty() || !data_url_within_limit(data_url, MAX_OCR_IMAGE_BYTES) {
+        return Err("unsupported image type".to_string());
+    }
+    let bytes = data_url_bytes(data_url);
+    decode_image_mem_oriented(&bytes).map(|img| img.to_rgba8()).ok_or_else(|| "unsupported image type".to_string())
+}
+
+// Same read as ocr_image, on the image the crop view hands over as a data URL (the chosen
+// area, or the whole picture when the frame was left alone).
+#[tauri::command]
+pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
+    let upscale_under_px = upscale_under_px.clamp(100, 800);
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            let img = ocr_decode_data_url(&data_url)?;
+            ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+}
+
 // Long enough for a real screenshot of text, short enough that a photo of a wall of text
 // cannot inflate the database.
 pub(crate) const OCR_INDEX_MAX_CHARS: usize = 20000;

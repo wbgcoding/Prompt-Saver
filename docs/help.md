@@ -590,7 +590,10 @@ A button on the input bar pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
 own text recognizer; nothing is uploaded or sent anywhere. A click on the input bar
 button recognizes text in a screenshot you take right now, a right-click picks an
-image file instead.
+image file instead. The picked image first opens in a crop view: drag the frame
+around the text you want and choose Recognize text, or leave the frame alone to
+read the whole image. The Expert menu switch "Choose the area before reading an
+image file" turns this step off.
 It needs a Windows language pack: see "Language packs" for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
@@ -1423,7 +1426,11 @@ verwirren würde. Der Export bleibt davon unberührt.
 
 **Texterkennung (OCR)**: liest per Button in der Leiste Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Ein Klick auf den Button
-in der Leiste liest einen Screenshot, ein Rechtsklick eine Bilddatei. Erkannter Text
+in der Leiste liest einen Screenshot, ein Rechtsklick eine Bilddatei. Die gewählte
+Bilddatei öffnet sich zuerst in einer Zuschnittansicht: Zieh den Rahmen um den
+gewünschten Text und wähle „Text erkennen“, oder lass den Rahmen unverändert, um das
+ganze Bild zu lesen. Der Schalter „Vor dem Erkennen einer Bilddatei den Bereich
+wählen“ im Expertenmenü schaltet diesen Schritt ab. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
 „Sprachpakete“).

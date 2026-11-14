@@ -702,6 +702,9 @@ const RESULTS = {
   // answer one fixed query with a fixture id nothing's name or body contains,
   // so a probe can prove the badge without a real OCR engine.
   search_image_text: (a) => (a && String(a.query || "").toLowerCase() === "lighthouse") ? ["p4"] : [],
+  // The crop view of an image file hands its chosen area here; a probe reads the call
+  // arguments and window.__OCR_DATA_RESULT__ steers the answer.
+  ocr_image_data: () => window.__OCR_DATA_RESULT__ || { text: "stub recognized text", lang: "en-US" },
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   // Sealed unless a page says otherwise, so the default walk sees the healthy

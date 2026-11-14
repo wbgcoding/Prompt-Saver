@@ -1234,6 +1234,95 @@ def run(browser, tmp):
       }
     }
 """)
+    failed += ar_probe('ocrcrop1', 'text recognition of an image file: the crop view opens first, reads only the chosen area (the whole image when untouched), cancels without a question, and leaves no trace on the next editor', 'index', '1000x780', ba_seed, ba_common + r"""
+    await bootReady();
+    const el = (id) => document.getElementById(id);
+    const editorOpen = () => !el('snip-edit').classList.contains('hidden');
+    const shown = (id) => el(id).offsetParent !== null;
+    const ocrPick = async () => {
+      window.__SMOKE_ARGS__.length = 0;
+      window.__OPEN_EDIT_RESULT__ = { kind: 'image', data_url: captureFixture(), origin_dir: 'C:/Pictures', name: 'pic' };
+      el('ocr-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(600);
+    };
+    RESULTS.ocr_image = () => ({ text: 'whole file text', lang: 'en-US' });
+    // 1. the crop view opens, nothing is read yet, and only what a crop view needs is on screen
+    await ocrPick();
+    if (!editorOpen()) errs.push('ocrcrop1: the picked image did not open in the editor');
+    else {
+      if (callsFor('ocr_image').length || callsFor('ocr_image_data').length) errs.push('ocrcrop1: the file was read before an area was chosen');
+      const tools = [...document.querySelectorAll('#snip-edit-tools button[data-tool]')].filter((b) => b.offsetParent !== null).map((b) => b.dataset.tool);
+      if (tools.join() !== 'crop,hand') errs.push('ocrcrop1: tools in the crop view are ' + tools.join());
+      for (const id of ['snip-edit-saveas', 'snip-edit-saveas-format', 'snip-edit-keep', 'snip-edit-retry', 'snip-edit-scale', 'snip-edit-original']) {
+        if (shown(id)) errs.push('ocrcrop1: ' + id + ' is shown in the crop view');
+      }
+      if (el('snip-edit-title').textContent !== 'Choose the area to read') errs.push('ocrcrop1: title is ' + el('snip-edit-title').textContent);
+      if (!/Drag the frame/.test(el('snip-edit-nudge-hint').textContent) || !visible(el('snip-edit-nudge-hint').firstElementChild)) errs.push('ocrcrop1: the crop hint is missing');
+      if (el('snip-edit-apply').textContent.trim() !== 'Recognize text') errs.push('ocrcrop1: apply reads ' + el('snip-edit-apply').textContent.trim());
+      // 2. a smaller frame: only that area goes to the reader, nothing reaches the clipboard
+      await baCropTo(20, 10, 120, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      await sleep(700);
+      if (callsFor('copy_image_data').length) errs.push('ocrcrop1: the crop view copied to the clipboard while framing');
+      el('snip-edit-apply').click();
+      await sleep(600);
+      const od = callsFor('ocr_image_data');
+      if (od.length !== 1 || !/^data:image\/png/.test(od[0].dataUrl || '')) errs.push('ocrcrop1: Recognize text made ' + od.length + ' ocr_image_data calls');
+      else {
+        const im = await pixelsOf(od[0].dataUrl);
+        if (im.w !== 100 || im.h !== 60) errs.push('ocrcrop1: the read area is ' + im.w + 'x' + im.h + ', expected 100x60');
+      }
+      if (callsFor('ocr_image').length) errs.push('ocrcrop1: the whole file was read as well');
+      if (callsFor('copy_image_data').length) errs.push('ocrcrop1: Recognize text copied the image');
+      if (editorOpen()) errs.push('ocrcrop1: the crop view stayed open after Recognize text');
+      if (!visible(el('ocr-modal'))) errs.push('ocrcrop1: the result dialog did not show');
+      else if (el('ocr-result-text').value !== 'stub recognized text') errs.push('ocrcrop1: result text is ' + el('ocr-result-text').value);
+      el('ocr-modal-close').click(); await sleep(200);
+    }
+    // 3. an untouched frame reads the whole image
+    await ocrPick();
+    el('snip-edit-apply').click(); await sleep(600);
+    const whole = callsFor('ocr_image_data');
+    if (whole.length !== 1) errs.push('ocrcrop1: an untouched frame made ' + whole.length + ' reads');
+    else {
+      const im = await pixelsOf(whole[0].dataUrl);
+      if (im.w !== BAW || im.h !== BAH) errs.push('ocrcrop1: the untouched frame read ' + im.w + 'x' + im.h);
+    }
+    el('ocr-modal-close').click(); await sleep(200);
+    // 4. Escape and the X cancel without a question and without reading
+    await ocrPick();
+    baKey('Escape'); await sleep(300);
+    if (editorOpen() && el('confirm-modal') && visible(el('confirm-modal'))) errs.push('ocrcrop1: Escape asked a question');
+    if (editorOpen()) { baKey('Escape'); await sleep(300); }
+    if (editorOpen()) errs.push('ocrcrop1: Escape left the crop view open');
+    if (visible(el('confirm-modal'))) errs.push('ocrcrop1: closing the crop view asked to save');
+    if (callsFor('ocr_image_data').length || callsFor('ocr_image').length || callsFor('copy_image_data').length) errs.push('ocrcrop1: a cancelled crop view still read or copied');
+    // 5. a normal capture right after shows the full editor again
+    window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/first.png', name: 'ba.png' });
+    await sleep(500);
+    if (!editorOpen()) errs.push('ocrcrop1: a capture after the crop view did not open');
+    else {
+      for (const id of ['snip-edit-saveas', 'snip-edit-keep', 'snip-edit-scale', 'snip-edit-original']) {
+        if (!shown(id)) errs.push('ocrcrop1: ' + id + ' stayed hidden after the crop view');
+      }
+      if (el('snip-edit-title').textContent === 'Choose the area to read') errs.push('ocrcrop1: the crop title stayed');
+      if (el('snip-edit-apply').textContent.trim() === 'Recognize text') errs.push('ocrcrop1: the apply label stayed');
+      if (document.querySelectorAll('#snip-edit-tools button[data-tool]').length < 5) errs.push('ocrcrop1: the full tool list did not return');
+    }
+""")
+    failed += ar_probe('ocrcrop2', 'text recognition of an image file: with the crop step off the file is read directly', 'index', '1000x780',
+                       '<script>window.__SEED_SETTINGS__ = { ui_flags: { ocrCropFirst: false } };</script>\n', ba_common + r"""
+    await bootReady();
+    RESULTS.ocr_image = () => ({ text: 'whole file text', lang: 'en-US' });
+    window.__SMOKE_ARGS__.length = 0;
+    window.__OPEN_EDIT_RESULT__ = { kind: 'image', data_url: captureFixture(), origin_dir: 'C:/Pictures', name: 'pic' };
+    document.getElementById('ocr-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await sleep(600);
+    if (callsFor('ocr_image').length !== 1) errs.push('ocrcrop2: with the step off the file was not read directly');
+    if (callsFor('open_file_in_editor').length) errs.push('ocrcrop2: with the step off the file opened in the editor');
+    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('ocrcrop2: with the step off the editor opened');
+    if (document.getElementById('ocr-result-text').value !== 'whole file text') errs.push('ocrcrop2: result text is ' + document.getElementById('ocr-result-text').value);
+""")
     failed += ar_probe('livecopy1', 'screenshot editor: edits reach the clipboard after a quiet half second, one copy per burst, none for an untouched capture, and Close cancels a pending one', 'index', '1000x780', ba_seed, ba_common + r'''
     if (!(await baOpen('C:/shots/first.png'))) { errs.push('livecopy1: the editor did not open'); }
     else {

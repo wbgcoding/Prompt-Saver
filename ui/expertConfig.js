@@ -117,6 +117,8 @@ export const FLAG_LABELS = {
   // Sub-toggles of ocr, themselves default on.
   ocrAutoCopy: "flagOcrAutoCopy",
   ocrJoinLines: "flagOcrJoinLines",
+  // Opens an image file picked for text recognition in a crop view first.
+  ocrCropFirst: "flagOcrCropFirst",
   // Auto-opens the five-step first-run tour once, right after the example
   // prompts are seeded. Off only stops the AUTOMATIC open: the Help-menu entry
   // that reopens the tour manually stays available either way.
@@ -506,7 +508,7 @@ export const EXPERT_TABS = [
     { title: "expGroupScreenshot", flags: ["screenshot", { key: "screenshotSave", gate: "screenshot" }], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
     { title: "expGroupSnipEditor", flags: [{ key: "snipEditSnap", gate: "screenshot" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal: same gate as the rest of the feature.
-    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
+    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrCropFirst", gate: "ocr" }], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"] },
     // The recording hotkeys render their own capture row (hotkeyRow()) instead of a button that
@@ -597,7 +599,7 @@ export const EXPERT_TIPS = [
   "snipSaveQuality", "snipDelayMs",
   "snipDefaultColor",
   "snipEditSnap", "snipTextBack", "snipEditDefaultTool",
-  "ocr", "ocrLang",
+  "ocr", "ocrLang", "ocrCropFirst",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLang", "voiceInsert", "voiceOnlineOk",
   "voiceHotkey", "voiceHotkeyTarget",

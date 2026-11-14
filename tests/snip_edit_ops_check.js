@@ -33,7 +33,7 @@ function sandbox() {
     snipEditUpdateUndoRedoButtons() {}, snipEditClearLive() {}, snipEditRedrawBase() {},
     snipEditFit() {}, snipEditDrawCropOverlayLive() {}, snipEditFullCropRect: () => ({ x: 0, y: 0, w: 10, h: 10 }),
     snipEditSetTool(id) { sb.tools.push(id); },
-    SNIP_TOOLS: [{ id: "rect", key: "r" }],
+    snipEditToolList: () => [{ id: "rect", key: "r" }],
     snipEditCropIsFull: (r) => r.w === 10 && r.h === 10,
     cropCommits: 0, snipEditCropCommit() { sb.cropCommits++; },
     snipColorPop: { name: "color" }, snipScalePop: { name: "scale" },

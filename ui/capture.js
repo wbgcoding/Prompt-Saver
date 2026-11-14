@@ -116,6 +116,13 @@ export function bindCapture() {
     e.preventDefault();
     openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"), true);
   });
+  // The answers open_file_in_editor gives for a file the editors cannot take.
+  function openFileErrToast(err) {
+    const msg = String(err);
+    if (msg === "not-media") toast(t("openFileNotMedia"));
+    else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", () => msg.split(":")[1] || ""));
+    else errToast(err);
+  }
   // Shared by the composer menu and the library's "Open in editor" on an image/video
   // attachment; existingPath hands over a path the caller already knows.
   async function openExternalFileInEditor(existingPath) {
@@ -125,10 +132,7 @@ export function bindCapture() {
     try {
       res = await invoke("open_file_in_editor", { path });
     } catch (err) {
-      const msg = String(err);
-      if (msg === "not-media") toast(t("openFileNotMedia"));
-      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", () => msg.split(":")[1] || ""));
-      else errToast(err);
+      openFileErrToast(err);
       return;
     }
     if (res.kind === "image") {
@@ -897,11 +901,34 @@ export function bindCapture() {
     e.preventDefault();
     const path = await withDialog(() => invoke("pick_file_path", { imagesOnly: true, filterLabel: t("pickFilterImages") }));
     if (!path) return;
+    // With the crop step on, the picture opens in the crop view first and only the chosen area is
+    // read; off, the whole file is read straight away.
+    if (flag("ocrCropFirst")) { await openOcrCropView(path); return; }
     try {
       showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
       recordToolUsage("ocr");
     } catch (err) { ocrErrToast(err); }
   });
+  async function openOcrCropView(path) {
+    let res;
+    try {
+      res = await invoke("open_file_in_editor", { path });
+    } catch (err) {
+      openFileErrToast(err);
+      return;
+    }
+    if (res.kind !== "image") { toast(t("openFileNotMedia")); return; }
+    // A new session replaces an open editor like any other new image does (asking about edits).
+    if (snipEditState().active && !(await snipEditRequestClose({ replacing: true }))) return;
+    snipEditOpen(res.data_url, {
+      mode: "ocr",
+      actions: {
+        ocr: (url) => invoke("ocr_image_data", { dataUrl: url, ...ocrSettings() })
+          .then((r) => { recordToolUsage("ocr"); showOcrResult(r); })
+          .catch(ocrErrToast),
+      },
+    });
+  }
   // Screenshot-into-OCR result, emitted by capture_region's OCR branch; a separate event from
   // "snip-captured" so the normal flow is unaffected.
   listen("ocr-captured", (e) => showOcrResult(e.payload));

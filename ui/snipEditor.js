@@ -110,6 +110,9 @@ export function initSnipEditor() {
     { id: "spotlight", key: "-", label: "snipToolSpotlight" },
     { id: "hand", key: "h", label: "snipToolHand" },
   ];
+  // The crop view for text recognition offers only the frame and the hand.
+  const SNIP_OCR_TOOLS = ["crop", "hand"];
+  const snipEditToolList = () => (SE.mode === "ocr" ? SNIP_TOOLS.filter((d) => SNIP_OCR_TOOLS.includes(d.id)) : SNIP_TOOLS);
 
   const snipEdit = $("snip-edit");
   const snipEditToolsEl = $("snip-edit-tools");
@@ -169,6 +172,8 @@ export function initSnipEditor() {
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
     cropRect: null, cropHintDismissed: false, lastNudged: null, eyedropArm: null, textEdit: null, textStyleRec: null, selOp: null,
     onClose: null, onCancel: null, actions: null, autoSaves: null,
+    // "ocr": the crop-only view that picks the area to read (see snipEditOpen), else "".
+    mode: "",
     // rev counts every change to the edits, savedRev the revision last written to a file.
     rev: 0, savedRev: 0,
   };
@@ -342,12 +347,13 @@ export function initSnipEditor() {
   function snipEditNoteChange() {
     SE.rev++;
     snipEditCancelLiveCopy();
-    if (!SE.active) return;
+    if (!SE.active || SE.mode === "ocr") return; // the crop view never touches the clipboard
     snipLiveCopyTimer = setTimeout(snipEditLiveCopy, SNIP_LIVE_COPY_MS);
     snipEditSyncDirty();
   }
   // Edits that are not in a file yet: some operation exists and changed since the last file save.
-  function snipEditDirty() { return SE.active && SE.ops.length > 0 && SE.rev !== SE.savedRev; }
+  // The crop view for text recognition has nothing to lose, so it is never dirty.
+  function snipEditDirty() { return SE.active && SE.mode !== "ocr" && SE.ops.length > 0 && SE.rev !== SE.savedRev; }
   // The backend learns when unsaved edits exist, so a quit (tray, Alt+F4) can ask first.
   let snipSentDirty = false;
   function snipEditSyncDirty() {
@@ -631,12 +637,13 @@ export function initSnipEditor() {
     // The line itself is always reserved under the image; only its text comes and goes. The crop
     // tool shows its own hint until the first drag.
     const cropHint = SE.tool === "crop" && !SE.cropHintDismissed;
-    snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged && !cropHint);
+    snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged && !cropHint && SE.mode !== "ocr");
     // The hint names only what works on this kind: Ctrl+Arrow resizes a box, moves a line's end
     // point and does nothing on the rest; a text box can also be opened again.
     const op = SE.lastNudged;
     const hintText = snipEditNudgeHintEl.firstElementChild;
-    hintText.dataset.i18n = cropHint ? "snipCropHint"
+    hintText.dataset.i18n = SE.mode === "ocr" ? "ocrCropHint"
+      : cropHint ? "snipCropHint"
       : !op ? "snipEditNudgeHint"
       : op.tool === "text" ? "snipEditNudgeHintText"
       : op.tool === "line" || op.tool === "arrow" ? "snipEditNudgeHintLine"
@@ -1551,7 +1558,7 @@ export function initSnipEditor() {
   // ---- toolbar (left): one tool active at a time ----
   function snipEditBuildToolButtons() {
     snipEditToolsEl.innerHTML = "";
-    for (const tdef of SNIP_TOOLS) {
+    for (const tdef of snipEditToolList()) {
       // Dividers between the drawing tools (pen..step) and the image tools (pixelate/spotlight),
       // and again before the view tool (hand), which does not draw.
       if (tdef.id === "pixelate" || tdef.id === "hand") {
@@ -1610,7 +1617,7 @@ export function initSnipEditor() {
     snipEditRenderContext();
     snipEditOpenContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
-    snipRememberTool(tool);
+    if (SE.mode !== "ocr") snipRememberTool(tool);
     if (keepText) snipEditShowTextSelection();
   }
 
@@ -2047,7 +2054,7 @@ export function initSnipEditor() {
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     // Ctrl+V and friends are not tool or toggle keys.
     const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
-    if (plainKey && e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
+    if (plainKey && e.key.toLowerCase() === "v" && !e.repeat && SE.mode !== "ocr") { snipOriginalToggle.press(); return; }
     // A slider keeps its own arrow keys.
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged && e.target?.type !== "range") {
       e.preventDefault();
@@ -2055,7 +2062,7 @@ export function initSnipEditor() {
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
       return;
     }
-    const tdef = plainKey && SNIP_TOOLS.find((t) => t.key === e.key || (t.key === "-" && e.key === "ß"));
+    const tdef = plainKey && snipEditToolList().find((t) => t.key === e.key || (t.key === "-" && e.key === "ß"));
     if (tdef) { e.preventDefault(); snipEditSetTool(tdef.id); }
   }
   function snipEditKeyup(e) {
@@ -2068,12 +2075,39 @@ export function initSnipEditor() {
 
   // ---- open / cancel / apply / export ----
   // onClose(editedDataUrl | null, { writeFile }): the editor closed (Close, Esc, X); null = nothing was
-  // edited. actions: { save, saveAs, keep, ocr, retry } called with the current edited image;
+  // edited. actions: { save, saveAs, keep, retry } called with the current edited image;
   // `retry` is absent for an opened file, which hides "New screenshot".
+  // mode "ocr" is the crop view that comes before text recognition on an image file: only the
+  // crop frame (forced active, whole image) and the hand, no save or keep buttons, and the
+  // main button runs actions.ocr on the chosen area and closes. Nothing is stored or lost.
   // Counts the opens: images decode asynchronously, so a slow one finishing after a newer open
   // must not take the editor over from it.
   let snipEditOpenSeq = 0;
-  function snipEditOpen(dataUrl, { onClose, onCancel, actions, autoSaves }) {
+  // Hides what the crop view for text recognition does not use and swaps its title, apply label
+  // and hint; every other open restores them all.
+  function snipEditApplyMode() {
+    const ocr = SE.mode === "ocr";
+    for (const id of ["snip-edit-saveas-format", "snip-edit-saveas", "snip-edit-keep"]) $(id).classList.toggle("hidden", ocr);
+    snipEdit.querySelector(".snip-edit-view").classList.toggle("hidden", ocr); // resize and original
+    $("snip-edit-retry").classList.toggle("hidden", ocr || !SE.actions.retry);
+    const title = $("snip-edit-title");
+    title.dataset.i18n = ocr ? "ocrCropTitle" : "snipEditTitle";
+    title.textContent = t(title.dataset.i18n);
+    const apply = $("snip-edit-apply");
+    apply.dataset.i18n = ocr ? "ocrRecognize" : "close";
+    apply.textContent = t(apply.dataset.i18n);
+    // The close tooltip promises to keep a result, which is not what this button does here.
+    if (ocr) {
+      apply.removeAttribute("data-i18n-title");
+      apply.removeAttribute("data-shortcut");
+      apply.removeAttribute("title");
+    } else {
+      apply.dataset.i18nTitle = "snipEditCloseTip";
+      apply.dataset.shortcut = "snipCancel";
+      withShortcut(apply, "snipCancel");
+    }
+  }
+  function snipEditOpen(dataUrl, { onClose, onCancel, actions, autoSaves, mode }) {
     const img = new Image();
     const seq = ++snipEditOpenSeq;
     // A capture that fails to decode (truncated data URL, broken picked file) takes the same
@@ -2086,7 +2120,8 @@ export function initSnipEditor() {
     img.onload = () => {
       if (seq !== snipEditOpenSeq) return;
       snipEditDropCloseRun();
-      recordToolUsage("screenshot_editor");
+      SE.mode = mode === "ocr" ? "ocr" : "";
+      if (SE.mode !== "ocr") recordToolUsage("screenshot_editor");
       snipEditCancelLiveCopy();
       snipLiveCopyFailed = false;
       SE.img = img;
@@ -2099,7 +2134,7 @@ export function initSnipEditor() {
       SE.savedRev = 0;
       SE.autoSaves = autoSaves || null;
       SE.perTool = {};
-      SE.tool = SNIP_EDIT_DEFAULT_TOOL();
+      SE.tool = SE.mode === "ocr" ? "crop" : SNIP_EDIT_DEFAULT_TOOL();
       SE.cropRect = null;
       SE.selOp = null;
       SE.lastNudged = null;
@@ -2112,7 +2147,7 @@ export function initSnipEditor() {
       SE.onClose = onClose;
       SE.onCancel = onCancel;
       SE.actions = actions || {};
-      $("snip-edit-retry").classList.toggle("hidden", !SE.actions.retry);
+      snipEditApplyMode();
       $("snip-edit-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
       SE.active = true;
       snipEditWrap.style.cursor = ""; // clear a cursor left inline by the previous session
@@ -2261,6 +2296,9 @@ export function initSnipEditor() {
     return run;
   }
   async function snipEditRequestCloseRun() {
+    // The crop view for text recognition has nothing to save: X, Esc, a new capture or a quit
+    // simply drop it.
+    if (SE.mode === "ocr") { snipEditCancel(); return true; }
     snipEditFinishTextIfOpen();
     const leave = (opts) => {
       if (snipCloseReplacing) { snipEditCancel(); return Promise.resolve(); }
@@ -2302,7 +2340,12 @@ export function initSnipEditor() {
   $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
-  $("snip-edit-apply").addEventListener("click", () => snipEditRequestClose());
+  $("snip-edit-apply").addEventListener("click", () => {
+    if (SE.mode !== "ocr") { snipEditRequestClose(); return; }
+    // The export commits the frame (the whole image when it was left alone) before the editor goes.
+    snipEditAction("ocr");
+    snipEditCancel();
+  });
   $("snip-edit-keep").addEventListener("click", () => {
     const keep = SE.actions?.keep;
     snipEditApply((url) => keep?.(url));
