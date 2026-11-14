@@ -1208,3 +1208,70 @@ fn similar_inputs_skips_prompts_the_user_marked_as_not_duplicates() {
     let (_, others) = similar_inputs(&all, "a", &ignored).expect("a plain target");
     assert_eq!(others.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["c"]);
 }
+
+// A backup from before the daily usage table: its copy_log comes back, so the live daily rows
+// and the seeded marker must go, else the period stats keep the pre-restore history.
+#[test]
+fn restore_selective_data_scope_without_usage_daily_clears_the_live_one_and_its_marker() {
+    let dir = std::env::temp_dir();
+    let target = dir.join(format!("{}-test-restore-usage-target.db", brand::SLUG));
+    let staged = dir.join(format!("{}-test-restore-usage-staged.db", brand::SLUG));
+    {
+        let conn = full_schema_db(&target, "target");
+        conn.execute_batch(
+            "CREATE TABLE usage_daily(day INTEGER NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(day, id));
+                 INSERT INTO usage_daily VALUES(20000, 'live', 5);
+                 INSERT INTO meta VALUES('usage_daily_seeded', '1');
+                 INSERT INTO meta VALUES('settings', 'LIVE-SETTINGS');
+                 INSERT INTO copy_log VALUES(1, 'live');",
+        )
+        .unwrap();
+    }
+    {
+        let conn = full_schema_db(&staged, "staged");
+        conn.execute_batch("INSERT INTO copy_log VALUES(86400, 'old');").unwrap();
+    }
+    restore_selective(&target, &staged, "data").unwrap();
+    let conn = Connection::open(&target).unwrap();
+    let daily: i64 = conn.query_row("SELECT COUNT(*) FROM usage_daily", [], |r| r.get(0)).unwrap();
+    assert_eq!(daily, 0, "the pre-restore daily rows must go");
+    let seeded: i64 = conn.query_row("SELECT COUNT(*) FROM meta WHERE key='usage_daily_seeded'", [], |r| r.get(0)).unwrap();
+    assert_eq!(seeded, 0, "the seeded marker must go so the next read reseeds from the restored copy_log");
+    let settings: String = conn.query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0)).unwrap();
+    assert_eq!(settings, "LIVE-SETTINGS");
+    // The reseed the marker allows counts the restored copy_log.
+    db_seed_usage_daily_once(&conn, 0).unwrap();
+    let (day, id, n): (i64, String, i64) = conn.query_row("SELECT day, id, n FROM usage_daily", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+    assert_eq!((day, id.as_str(), n), (1, "old", 1));
+    drop(conn);
+    let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&staged);
+}
+
+// A backup that has the table replaces the live rows with its own and leaves the marker alone.
+#[test]
+fn restore_selective_data_scope_with_usage_daily_replaces_the_rows_and_keeps_the_marker() {
+    let dir = std::env::temp_dir();
+    let target = dir.join(format!("{}-test-restore-usage2-target.db", brand::SLUG));
+    let staged = dir.join(format!("{}-test-restore-usage2-staged.db", brand::SLUG));
+    let usage = "CREATE TABLE usage_daily(day INTEGER NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(day, id));";
+    {
+        let conn = full_schema_db(&target, "target");
+        conn.execute_batch(usage).unwrap();
+        conn.execute_batch("INSERT INTO usage_daily VALUES(20000, 'live', 5); INSERT INTO meta VALUES('usage_daily_seeded', '1');").unwrap();
+    }
+    {
+        let conn = full_schema_db(&staged, "staged");
+        conn.execute_batch(usage).unwrap();
+        conn.execute_batch("INSERT INTO usage_daily VALUES(10, 'old', 2);").unwrap();
+    }
+    restore_selective(&target, &staged, "data").unwrap();
+    let conn = Connection::open(&target).unwrap();
+    let id: String = conn.query_row("SELECT id FROM usage_daily", [], |r| r.get(0)).unwrap();
+    assert_eq!(id, "old");
+    let seeded: i64 = conn.query_row("SELECT COUNT(*) FROM meta WHERE key='usage_daily_seeded'", [], |r| r.get(0)).unwrap();
+    assert_eq!(seeded, 1);
+    drop(conn);
+    let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&staged);
+}

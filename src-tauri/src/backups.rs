@@ -978,13 +978,23 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
                 // built from the live table's own column names, so nothing read out of the backup file ends
                 // up in the SQL text.
                 let backup_cols = table_columns(&tx, "backup", table)?;
-                let shared: Vec<String> = table_columns(&tx, "main", table)?
+                let live_cols = table_columns(&tx, "main", table)?;
+                let live_has_table = !live_cols.is_empty();
+                let shared: Vec<String> = live_cols
                     .into_iter()
                     .filter(|c| backup_cols.iter().any(|b| b.eq_ignore_ascii_case(c)))
                     .collect();
                 // Nothing in common, including a table missing from an older backup entirely (e.g. "trash"):
                 // leave the live rows alone rather than emptying them.
                 if shared.is_empty() {
+                    // The one exception: a backup from before the daily usage table, restored together with
+                    // its copy_log. The live daily rows would keep showing the pre-restore history, so they
+                    // go, and the seeded marker with them: the next read counts them again from the
+                    // restored copy_log.
+                    if table == "usage_daily" && live_has_table && backup_cols.is_empty() && !table_columns(&tx, "backup", "copy_log")?.is_empty() {
+                        tx.execute("DELETE FROM usage_daily", [])?;
+                        tx.execute("DELETE FROM meta WHERE key = 'usage_daily_seeded'", [])?;
+                    }
                     continue;
                 }
                 let cols = shared.join(", ");
