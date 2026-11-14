@@ -29,11 +29,16 @@ function sandbox(over) {
     recModal: { classList: { contains: () => sb.hidden } }, hidden: false,
     pendingRecPath: "C:/rec/first.mp4", recSavedOrAttached: false, recGen: 3,
     recWork: Promise.resolve(), recSaveBusy: false, recSaveAsBusy: false, recCopyBusy: false,
-    invoke: async (cmd, args) => { sb.calls.push([cmd, args.srcPath]); return "C:/saved/first.mp4"; },
+    recTakeKey: "C:/rec/first-last.mp4", partCalls: [],
+    invoke: async (cmd, args) => {
+      if (cmd === "save_recording_parts") { sb.partCalls.push(args); return [2, 0]; }
+      sb.calls.push([cmd, args.srcPath]);
+      return "C:/saved/first.mp4";
+    },
     toast: (m) => sb.toasts.push(m), errToast: (e) => sb.errs.push(String(e)), t: (k) => k,
   }, over || {});
   vm.createContext(sb);
-  vm.runInContext("var recHandoff = Promise.resolve();" + extractBlock("async function keepUndecidedRecording() {"), sb);
+  vm.runInContext("var recHandoff = Promise.resolve();" + extractBlock("async function keepRecParts(besideSaveAs) {") + extractBlock("async function keepUndecidedRecording() {"), sb);
   return sb;
 }
 
@@ -48,18 +53,20 @@ function sandbox(over) {
     release();
     await done;
     check("undecided take is saved as a plain save", sb.calls, [["save_recording_now", "C:/rec/first.mp4"]]);
-    check("saved note shown", sb.toasts, ["recPrevSaved"]);
+    check("saved note shown", sb.toasts, ["recContinuePartsSaved", "recPrevSaved"]);
     check("marked decided", sb.recSavedOrAttached, true);
+    // The displaced take's extra parts go with it, named by its own take key.
+    check("displaced take's parts are saved with it", sb.partCalls, [{ besideSaveAs: false, take: "C:/rec/first-last.mp4" }]);
   }
   {
     const sb = sandbox({ recSavedOrAttached: true });
     await sb.keepUndecidedRecording();
-    check("already saved or attached: untouched", sb.calls, []);
+    check("already saved or attached: untouched", [sb.calls, sb.partCalls], [[], []]);
   }
   {
     const sb = sandbox({ hidden: true });
     await sb.keepUndecidedRecording();
-    check("closed dialog: untouched", sb.calls, []);
+    check("closed dialog: untouched", [sb.calls, sb.partCalls], [[], []]);
   }
   {
     // The user closed the dialog while the work ran: the close owns the take.
@@ -69,12 +76,23 @@ function sandbox(over) {
     sb.recGen = 4;
     release();
     await done;
-    check("closed while waiting: untouched", sb.calls, []);
+    check("closed while waiting: untouched", [sb.calls, sb.partCalls], [[], []]);
   }
   {
     const sb = sandbox({ invoke: async () => { throw "disk full"; } });
     await sb.keepUndecidedRecording();
     check("failed save: error shown, no saved note", [sb.errs, sb.toasts], [["disk full"], []]);
+    check("failed save: no parts moved", sb.partCalls, []);
+  }
+  {
+    // The new dialog's take key is set only after the displaced take was saved with its own key,
+    // and a parts save reads the key when it starts (a later swap cannot redirect it).
+    const m = src.match(/const mine = recHandoff[\s\S]*?await keepUndecidedRecording\(\);([\s\S]*?)recWork = openRecModal/);
+    check("result handler sets the new take key after the handoff", !!m && /recTakeKey = path;/.test(m[1]), true);
+    const keep = extractBlock("async function keepRecParts(besideSaveAs) {");
+    check("parts save reads the key before awaiting", /const take = recTakeKey;[\s\S]*await invoke\("save_recording_parts", \{ besideSaveAs, take \}\)/.test(keep), true);
+    const discard = src.match(/invoke\("discard_recording_parts"[^)]*\)/);
+    check("discard names the take", !!discard && discard[0].includes("take"), true);
   }
   for (const p of problems) console.log("FAIL", p);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");

@@ -571,6 +571,7 @@ pub(crate) async fn finish_and_continue_recording(
                 REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).push(RecordingPartInfo {
                     path: path.to_string_lossy().to_string(),
                     mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
+                    take: String::new(),
                 });
                 ContinueOutcome::Continued(Box::new(new_session), RecordingContinuedPayload {
                     finished_part_path: path.to_string_lossy().to_string(),
@@ -599,7 +600,7 @@ pub(crate) async fn finish_and_continue_recording(
                     resize_crop_at_ms,
                     parts,
                 };
-                *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
+                register_result_parts(&REC_RESULT_PARTS, &payload.path, &payload.parts);
                 reveal_main_for_result(&app2);
                 let _ = app2.emit("recording-captured", payload);
                 ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}"))
@@ -741,7 +742,7 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     };
     // The earlier parts wait for the result dialog's decision: registered before
     // the sweep below so it cannot take an old part.
-    *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
+    register_result_parts(&REC_RESULT_PARTS, &payload.path, &payload.parts);
     // The stop/pause hotkeys and the tray's two extra rows go away the moment nothing is
     // recording, on every end path (button, hotkey, auto-stop).
     rearm_hotkeys(app);

@@ -92,7 +92,7 @@ fn video_folder_cleanup_takes_the_sidecars_of_a_deleted_recording() {
 pub(super) fn part_info(dir: &Path, name: &str) -> RecordingPartInfo {
     let path = dir.join(name);
     fs::write(&path, b"video").unwrap();
-    RecordingPartInfo { path: path.to_string_lossy().to_string(), mic_wav_path: None }
+    RecordingPartInfo { path: path.to_string_lossy().to_string(), mic_wav_path: None, take: String::new() }
 }
 
 #[test]
@@ -271,7 +271,7 @@ fn the_media_dialogs_wait_on_a_blocking_thread() {
 
 #[test]
 fn a_running_parts_save_is_marked_in_flight_and_quit_waits_for_it() {
-    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None };
+    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None, take: String::new() };
     let shared = std::sync::Mutex::new(vec![part("ps-q6-inflight.mp4")]);
     let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
     let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
@@ -493,4 +493,60 @@ fn the_video_editor_pickers_name_their_kind_and_share_one_in_flight_guard() {
     assert!(!js.contains("invoke(\"pick_file_path\")"), "every picker passes its kind");
     assert_eq!(js.matches("pickPath(").count(), 5, "one definition and four call sites");
     assert!(js.contains("let picking = false;") && js.contains("kind: \"image\"") && js.contains("kind: \"video\""));
+}
+
+// Two "finish and continue" takes wait in the result list at once when a new result arrives
+// while the dialog still shows the earlier take: each take's Save or Discard moves only its
+// own parts, and no part file of either is left behind.
+#[test]
+fn two_waiting_takes_keep_their_own_parts() {
+    let base = std::env::temp_dir().join(format!("ps-test-two-takes-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    let src = base.join("recordings");
+    let saved = base.join("saved");
+    fs::create_dir_all(&src).unwrap();
+    let first_parts = vec![part_info(&src, "rec-2026-01-01-00-00-00_part1.mp4"), part_info(&src, "rec-2026-01-01-00-00-00_part2.mp4")];
+    let second_parts = vec![part_info(&src, "rec-2026-01-01-01-00-00_part1.mp4")];
+    let list = std::sync::Mutex::new(Vec::new());
+    register_result_parts(&list, "first-last.mp4", &first_parts);
+    register_result_parts(&list, "second-last.mp4", &second_parts);
+    assert_eq!(list.lock().unwrap().len(), 3, "the second take does not replace the first take's parts");
+    // The displaced first take is saved: only its two parts move.
+    let allowed = vec![src.clone()];
+    let (n_saved, n_failed) = with_parts_outside_lock_for(&list, Some("first-last.mp4"), |parts| place_recording_parts(parts, &allowed, &saved));
+    assert_eq!((n_saved, n_failed), (2, 0));
+    assert!(saved.join("rec-2026-01-01-00-00-00_part1.mp4").is_file());
+    assert!(saved.join("rec-2026-01-01-00-00-00_part2.mp4").is_file());
+    assert!(!saved.join("rec-2026-01-01-01-00-00_part1.mp4").exists(), "the new take's part stays");
+    assert!(src.join("rec-2026-01-01-01-00-00_part1.mp4").is_file());
+    {
+        let left = list.lock().unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].take, "second-last.mp4");
+    }
+    // The new take is discarded: its part goes to the holding folder, the list ends empty.
+    let mut mine = split_take_parts(&mut list.lock().unwrap(), Some("second-last.mp4"));
+    assert_eq!(discard_recording_parts_in(&mut mine, &allowed, &src), 1);
+    assert!(src.join("verworfen").join("rec-2026-01-01-01-00-00_part1.mp4").is_file());
+    assert!(list.lock().unwrap().is_empty());
+    let loose: Vec<_> = fs::read_dir(&src).unwrap().flatten().filter(|e| e.path().is_file()).collect();
+    assert!(loose.is_empty(), "no part file of either take is left in the recordings folder");
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[test]
+fn a_failed_part_of_one_take_stays_listed_for_that_take_only() {
+    let base = std::env::temp_dir().join(format!("ps-test-two-takes-fail-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    let src = base.join("recordings");
+    fs::create_dir_all(&src).unwrap();
+    let list = std::sync::Mutex::new(Vec::new());
+    register_result_parts(&list, "a.mp4", &[part_info(&src, "notes-a.mp4")]);
+    register_result_parts(&list, "b.mp4", &[part_info(&src, "rec-2026-01-01-02-00-00_part1.mp4")]);
+    let allowed = vec![src.clone()];
+    let (n_saved, n_failed) = with_parts_outside_lock_for(&list, Some("a.mp4"), |parts| place_recording_parts(parts, &allowed, &base.join("saved")));
+    assert_eq!((n_saved, n_failed), (0, 1), "a file that is no recording of ours is refused");
+    let takes: Vec<String> = list.lock().unwrap().iter().map(|p| p.take.clone()).collect();
+    assert_eq!(takes, vec!["a.mp4".to_string(), "b.mp4".to_string()]);
+    let _ = fs::remove_dir_all(&base);
 }

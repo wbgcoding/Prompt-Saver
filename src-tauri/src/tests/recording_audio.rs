@@ -1305,7 +1305,7 @@ fn stopping_and_cancelling_a_recording_return_plain_values() {
 
 #[test]
 fn saving_the_parts_does_not_hold_the_shared_list_lock() {
-    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None };
+    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None, take: String::new() };
     let shared = std::sync::Mutex::new(vec![part("a"), part("b")]);
     let seen = with_parts_outside_lock(&shared, |mine| {
         assert!(shared.try_lock().is_ok(), "the lock is free while the parts are being moved");

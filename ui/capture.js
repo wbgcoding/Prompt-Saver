@@ -336,11 +336,16 @@ export function bindCapture() {
   // still removes the working file; recCopiedNotSaved gates the confirm-before-delete for that.
   let recSavedOrAttached = false;
   let recCopiedNotSaved = false;
+  // The result the open dialog shows, as the stop reported it. The backend keeps the earlier
+  // parts of every take still waiting under this key, so a new result arriving before the
+  // dialog decided cannot swap the parts of the take being saved.
+  let recTakeKey = "";
   // The earlier parts of a "finish and continue" take go where the last file
   // went; the toast names only what really got saved.
   async function keepRecParts(besideSaveAs) {
+    const take = recTakeKey;
     try {
-      const [saved, failed] = await invoke("save_recording_parts", { besideSaveAs });
+      const [saved, failed] = await invoke("save_recording_parts", { besideSaveAs, take });
       if (saved > 0) toast(t("recContinuePartsSaved").replace("{n}", String(saved)));
       if (failed > 0) toast(t("recPartsNotSaved").replace("{n}", String(failed)));
     } catch (err) {
@@ -380,6 +385,7 @@ export function bindCapture() {
     recGen += 1;
     recLateOutput = "";
     const work = recWork;
+    const take = recTakeKey;
     invoke("cancel_recording_convert").catch(() => {});
     invoke("cancel_recording_crop").catch(() => {});
     if (recProgressOff) { recProgressOff(); recProgressOff = null; }
@@ -405,7 +411,7 @@ export function bindCapture() {
     const late = recLateOutput;
     recLateOutput = "";
     if (shouldDelete && late && late !== path) invoke("discard_recording_file", { path: late }).catch(() => {});
-    if (shouldDelete) invoke("discard_recording_parts").catch(() => {});
+    if (shouldDelete) invoke("discard_recording_parts", { take }).catch(() => {});
   }
   // needsCrop: the window recording's canvas was bigger than the window ever was (a
   // multi-display canvas). Trim the black margin first, with a visible, cancellable status line
@@ -495,6 +501,8 @@ export function bindCapture() {
     try {
       await invoke("save_recording_now", { srcPath: pendingRecPath });
       recSavedOrAttached = true;
+      // The take's extra parts go with it, before the next dialog changes the key.
+      await keepRecParts(false);
       toast(t("recPrevSaved"));
     } catch (err) {
       errToast(err);
@@ -598,6 +606,7 @@ export function bindCapture() {
       // save first, and a third result queues behind the second instead of racing it.
       const mine = recHandoff.catch(() => {}).then(async () => {
         await keepUndecidedRecording();
+        recTakeKey = path;
         recWork = openRecModal(path, !!e.payload?.needs_crop);
       });
       recHandoff = mine;

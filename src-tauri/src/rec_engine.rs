@@ -1004,6 +1004,11 @@ pub(crate) struct RecordingStoppedPayload {
 pub(crate) struct RecordingPartInfo {
     pub(crate) path: String,
     pub(crate) mic_wav_path: Option<String>,
+    // The last file of the take this part belongs to, set when the take stops. Two takes can
+    // wait in the result list at once (a new result while the dialog still shows the earlier
+    // take), and Save or Discard of one must not move the other's parts.
+    #[serde(skip)]
+    pub(crate) take: String,
 }
 
 // A cancel discards the whole take: every earlier part a "finish and continue" chain closed

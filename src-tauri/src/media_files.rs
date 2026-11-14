@@ -670,10 +670,11 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
 }
 
 // Save/Attach/Edit/Save as in the result dialog: the earlier parts of a "finish and continue"
-// take go where the last file went. `beside_save_as` picks the folder of the latest Save as
-// instead of the recordings folder.
+// take (`take` = that take's last file as the stop reported it) go where the last file went;
+// a second take waiting in the list keeps its own parts. `beside_save_as` picks the folder of
+// the latest Save as instead of the recordings folder.
 #[tauri::command]
-pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, beside_save_as: bool) -> Result<(u32, u32), String> {
+pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, beside_save_as: bool, take: String) -> Result<(u32, u32), String> {
     let allowed = recording_source_dirs(&app, &state);
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = if beside_save_as {
@@ -686,7 +687,7 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     tauri::async_runtime::spawn_blocking(move || {
         // A part still being cropped in the background is only moved once that crop ended.
         wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
-        with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest))
+        with_parts_outside_lock_for(&REC_RESULT_PARTS, Some(&take), |parts| place_recording_parts(parts, &allowed, &dest))
     })
     .await
     .map_err(|e| e.to_string())
@@ -733,8 +734,36 @@ pub(crate) fn with_parts_outside_lock<R>(
     shared: &Mutex<Vec<RecordingPartInfo>>,
     work: impl FnOnce(&mut Vec<RecordingPartInfo>) -> R,
 ) -> R {
+    with_parts_outside_lock_for(shared, None, work)
+}
+
+// Adds a stopped take's earlier parts to the result list, tagged with the take's last file. A
+// take still waiting there keeps its parts: a new result may arrive before the dialog decided.
+pub(crate) fn register_result_parts(shared: &Mutex<Vec<RecordingPartInfo>>, take: &str, parts: &[RecordingPartInfo]) {
+    let mut list = shared.lock().unwrap_or_else(|e| e.into_inner());
+    list.extend(parts.iter().map(|p| RecordingPartInfo { take: take.to_string(), ..p.clone() }));
+}
+
+// Moves the parts of one take (`Some`) or of every take (`None`) out of `list`.
+pub(crate) fn split_take_parts(list: &mut Vec<RecordingPartInfo>, take: Option<&str>) -> Vec<RecordingPartInfo> {
+    match take {
+        None => std::mem::take(list),
+        Some(t) => {
+            let (mine, rest): (Vec<_>, Vec<_>) = std::mem::take(list).into_iter().partition(|p| p.take == t);
+            *list = rest;
+            mine
+        }
+    }
+}
+
+// Same as `with_parts_outside_lock`, limited to one take's parts when `take` is given.
+pub(crate) fn with_parts_outside_lock_for<R>(
+    shared: &Mutex<Vec<RecordingPartInfo>>,
+    take: Option<&str>,
+    work: impl FnOnce(&mut Vec<RecordingPartInfo>) -> R,
+) -> R {
     let _gate = REC_PARTS_GATE.lock().unwrap_or_else(|e| e.into_inner());
-    let mut mine = std::mem::take(&mut *shared.lock().unwrap_or_else(|e| e.into_inner()));
+    let mut mine = split_take_parts(&mut shared.lock().unwrap_or_else(|e| e.into_inner()), take);
     *REC_PARTS_SAVING.lock().unwrap_or_else(|e| e.into_inner()) = mine.clone();
     let _mark = PartsInFlight;
     let result = work(&mut mine);
@@ -762,11 +791,16 @@ pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, all
 
 // Runs on the command pool, not the main thread: it may wait for a part's background crop.
 #[tauri::command(async)]
-pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u32 {
+pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>, take: String) -> u32 {
     let allowed = recording_source_dirs(&app, &state);
     wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    discard_recording_parts_in(&mut parts, &allowed, &allowed[1])
+    // Only this take's parts go; a failed one stays listed, ahead of the other take's.
+    let mut mine = split_take_parts(&mut parts, Some(&take));
+    let moved = discard_recording_parts_in(&mut mine, &allowed, &allowed[1]);
+    mine.append(&mut parts);
+    *parts = mine;
+    moved
 }
 
 // The folder picker for the video editor's "choose folder" export target and the batch-export

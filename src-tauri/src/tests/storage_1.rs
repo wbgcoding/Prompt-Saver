@@ -725,7 +725,7 @@ fn remove_recording_part_files_takes_the_key_overlay_sidecar_with_it() {
     fs::write(&video, b"video").unwrap();
     fs::write(&mic, b"mic").unwrap();
     fs::write(&keys, b"{}").unwrap();
-    let part = RecordingPartInfo { path: video.to_string_lossy().to_string(), mic_wav_path: Some(mic.to_string_lossy().to_string()) };
+    let part = RecordingPartInfo { path: video.to_string_lossy().to_string(), mic_wav_path: Some(mic.to_string_lossy().to_string()), take: String::new() };
     remove_recording_part_files(&part, &dir);
     assert!(!video.exists());
     assert!(!mic.exists());
