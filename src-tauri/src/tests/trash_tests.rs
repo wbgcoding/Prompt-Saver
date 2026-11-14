@@ -226,3 +226,12 @@ fn an_unreadable_snapshot_keeps_the_files_older_than_it() {
     assert!(!old.exists(), "a file newer than every unreadable snapshot is swept as before");
     let _ = std::fs::remove_dir_all(&base);
 }
+
+// The pills and folders on screen read the tile font and size only on a settings-changed event.
+#[test]
+fn changing_the_tile_style_tells_the_floating_windows() {
+    let src = include_str!("../trash.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) fn set_tile_style").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.contains("notify_float_settings(&app)"));
+}

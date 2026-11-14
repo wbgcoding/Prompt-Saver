@@ -43,13 +43,13 @@ fn the_static_asset_scope_allows_nothing_and_denies_the_sidecars() {
 fn media_dirs_lists_data_recording_and_temp_once_without_empties() {
     let data = PathBuf::from("D:/data");
     let temp = PathBuf::from("D:/tmp");
-    let dirs = crate::asset_scope::media_dirs(&data, "E:/takes", &temp);
+    let dirs = crate::asset_scope::media_dirs(&data, "E:/takes", &temp, None);
     assert_eq!(dirs, vec![data.clone(), PathBuf::from("E:/takes"), temp.join(brand::TEMP_DIR)]);
     // A recording folder equal to the data folder is not listed twice.
-    let same = crate::asset_scope::media_dirs(&data, "D:/data", &temp);
+    let same = crate::asset_scope::media_dirs(&data, "D:/data", &temp, None);
     assert_eq!(same, vec![data.clone(), temp.join(brand::TEMP_DIR)]);
     // An empty data folder is dropped.
-    let none = crate::asset_scope::media_dirs(Path::new(""), "E:/takes", &temp);
+    let none = crate::asset_scope::media_dirs(Path::new(""), "E:/takes", &temp, None);
     assert_eq!(none, vec![PathBuf::from("E:/takes"), temp.join(brand::TEMP_DIR)]);
 }
 
@@ -407,4 +407,35 @@ fn a_restore_keeps_local_marks_and_a_settings_only_restore_marks_nothing() {
     crate::vault::apply_import(&mut full, backup_with(vec![prompt_with(&foreign, "")]), true, true, &[]);
     assert!(crate::asset_scope::path_untrusted(&full.settings, &foreign), "marks survive the settings replacement");
     let _ = fs::remove_dir_all(&base);
+}
+
+// A foreign share path is held back from probing and copying without ever being resolved:
+// resolving it would contact the host.
+#[test]
+fn a_network_path_is_never_resolved_by_the_trust_checks() {
+    let unc = r"\\203.0.113.7\share\x.png";
+    let marked: std::collections::BTreeSet<String> = [crate::asset_scope::stored_key(unc)].into_iter().collect();
+    assert!(crate::asset_scope::held_untrusted(&marked, unc));
+    let asset = include_str!("../asset_scope.rs").replace("\r\n", "\n");
+    let keys = &asset[asset.find("fn picked_keys").unwrap()..];
+    let keys = &keys[..keys.find("\n}\n").unwrap()];
+    assert!(keys.find("is_network_path").unwrap() < keys.find("canonicalize").unwrap(), "the network check comes before any resolving");
+    let prompts = include_str!("../prompts.rs").replace("\r\n", "\n");
+    let race = &prompts[prompts.find("let open = |v: &str|").unwrap()..];
+    assert!(race[..race.find("let media_source").unwrap()].contains("attachment_path_refused"), "the locked fallback applies the same gate as the staged path");
+}
+
+// A portable copy run from Downloads keeps its data beside the exe: the scope gets the media
+// subfolders of it, not the whole folder with whatever else the user keeps there.
+#[test]
+fn a_portable_run_allows_only_the_media_subfolders_of_the_exe_folder() {
+    let exe_dir = PathBuf::from("D:/Downloads");
+    let temp = PathBuf::from("D:/tmp");
+    let dirs = crate::asset_scope::media_dirs(&exe_dir, "E:/takes", &temp, Some(&exe_dir));
+    assert_eq!(dirs, vec![exe_dir.join("files"), exe_dir.join("recordings"), PathBuf::from("E:/takes"), temp.join(brand::TEMP_DIR)]);
+    assert!(!dirs.contains(&exe_dir));
+    // A data folder somewhere else (installed, or a chosen folder) is listed whole as before.
+    let data = PathBuf::from("D:/data");
+    let other = crate::asset_scope::media_dirs(&data, "E:/takes", &temp, Some(&exe_dir));
+    assert_eq!(other, vec![data, PathBuf::from("E:/takes"), temp.join(brand::TEMP_DIR)]);
 }

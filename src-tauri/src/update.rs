@@ -474,12 +474,17 @@ pub(crate) fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -
     Ok(())
 }
 
+// Flags the UI writes to remember what the user saw or had open (saveUiState); none is an expert option.
+pub(crate) const UI_STATE_FLAGS: [&str; 5] =
+    ["tourSeen", "diagGroupSeeded", "backupListOpen", "storagePanelOpen", "retentionPanelOpen"];
+
 // Clears the expert flags, values and texts. What a full reset keeps stays: the retention
 // windows that keep longer than the default, the backup password and the vault's salt and
 // verifier (the confidential prompts are sealed with it).
 pub(crate) fn reset_expert_settings(settings: &mut Settings) {
     let fresh = settings_after_reset(settings);
-    settings.ui_flags.clear();
+    // The remembered UI state (tour seen, panels left open) is no expert option: a reset keeps it.
+    settings.ui_flags.retain(|k, _| UI_STATE_FLAGS.contains(&k.as_str()));
     settings.ui_values = fresh.ui_values;
     settings.ui_texts = fresh.ui_texts;
 }
@@ -502,6 +507,12 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
     // means the exclusion is on: re-assert it on every window so it is immediate.
     apply_capture_exclusion_all(&app, true);
     apply_tray_menu(&app); // The tray sections fall back to their defaults too
+    // Both ship on: a reset that brings them back must register the per-prompt hotkeys and merge
+    // the pills again, as switching them on does. The window sync hops onto the runtime
+    // (opening and closing windows inline from a command deadlocks WebView2).
+    rearm_hotkeys(&app);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
     notify_float_settings(&app);
     // The key overlay falls back to its default too: a running capture must not outlive it.
     #[cfg(windows)]

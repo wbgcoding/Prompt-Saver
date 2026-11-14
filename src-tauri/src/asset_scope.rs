@@ -48,6 +48,10 @@ const PICKED_MAX: usize = 4096;
 fn picked_keys(raw: &str) -> Vec<String> {
     let path = Path::new(raw);
     let mut keys = vec![file_key(path)];
+    // Resolving a network path would contact its host; the plain key is all such a path gets.
+    if crate::paths::is_network_path(raw) {
+        return keys;
+    }
     if let Ok(real) = fs::canonicalize(path) {
         let key = file_key(&real);
         if !keys.contains(&key) {
@@ -113,7 +117,7 @@ pub(crate) fn attachment_source_trusted(raw: &str, roots: &[PathBuf], stored: &H
 // to (data, recordings, screenshots, the export folder, its temp folder).
 pub(crate) fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf> {
     let text = |k: &str| settings.ui_texts.get(k).cloned().unwrap_or_default();
-    let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir());
+    let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir(), None);
     roots.push(crate::snip::screenshot_dir(&text("screenshotDir")));
     let export = text("videoExportDir");
     if !export.trim().is_empty() {
@@ -229,10 +233,19 @@ pub(crate) fn trust_picked_paths(settings: &mut Settings, paths: &[&str]) -> boo
 
 // The folders the windows read media from: data folder (stills, thumbnails, raw recordings),
 // recording folder (saved takes), and the app's own temp folder (editor working copies,
-// filmstrips, clip exports). Empty and repeated entries are dropped.
-pub(crate) fn media_dirs(data: &Path, recording_custom: &str, temp: &Path) -> Vec<PathBuf> {
+// filmstrips, clip exports). Empty and repeated entries are dropped. A portable run keeps its
+// data beside the exe, which may sit in Downloads or on the Desktop: there only the media
+// subfolders of it are listed, never the whole folder.
+pub(crate) fn media_dirs(data: &Path, recording_custom: &str, temp: &Path, exe_dir: Option<&Path>) -> Vec<PathBuf> {
+    let beside_exe = !data.as_os_str().is_empty() && exe_dir.is_some_and(|exe| crate::media_files::path_matches_configured_dir(data, exe));
+    let data_dirs: Vec<PathBuf> = if beside_exe {
+        PORTABLE_MEDIA_SUBDIRS.iter().map(|sub| data.join(sub)).collect()
+    } else {
+        vec![data.to_path_buf()]
+    };
+    let rest = [crate::media_files::recording_dir(recording_custom), temp.join(brand::TEMP_DIR)];
     let mut out: Vec<PathBuf> = Vec::new();
-    for dir in [data.to_path_buf(), crate::media_files::recording_dir(recording_custom), temp.join(brand::TEMP_DIR)] {
+    for dir in data_dirs.into_iter().chain(rest) {
         if dir.as_os_str().is_empty() || out.iter().any(|d| d == &dir) {
             continue;
         }
@@ -240,6 +253,9 @@ pub(crate) fn media_dirs(data: &Path, recording_custom: &str, temp: &Path) -> Ve
     }
     out
 }
+
+// The data subfolders a window loads media from: stored attachments and raw recordings.
+const PORTABLE_MEDIA_SUBDIRS: [&str; 2] = ["files", "recordings"];
 
 // The attachment paths of a prompt list that a window may show: the file and the icon, not
 // empty, and not a foreign network path (the same refusal that keeps a path from being probed or
@@ -285,7 +301,7 @@ pub(crate) fn allow_file(app: &AppHandle, raw: &str) {
 // The three media folders for the folders currently configured.
 pub(crate) fn allow_app_dirs(app: &AppHandle, settings: &Settings) {
     let custom = settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
-    for dir in media_dirs(&data_dir(app), &custom, &std::env::temp_dir()) {
+    for dir in media_dirs(&data_dir(app), &custom, &std::env::temp_dir(), crate::paths::portable_data_dir().as_deref()) {
         allow_dir_now(app, &dir);
     }
 }

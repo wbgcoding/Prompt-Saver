@@ -1141,6 +1141,18 @@ pub(crate) async fn restore_backup(app: AppHandle, name: String, keep: usize, sc
     app.restart();
 }
 
+// A pending prompts.json / settings.json is the leftover of a failed database write. The next launch
+// reads it as the truth over the database, so one left standing after a restore would put the
+// pre-restore library or settings back. Drops the file of each half the scope replaced.
+pub(crate) fn drop_restored_fallbacks(dir: &std::path::Path, scope: &str) {
+    if scope == "all" || scope == "data" {
+        drop_stale_fallback(dir, "prompts.json");
+    }
+    if scope == "all" || scope == "settings" {
+        drop_stale_fallback(dir, "settings.json");
+    }
+}
+
 // Everything a restore does except the relaunch. The command line and the receiver call this,
 // answer their caller, and only then restart: a restart inside the call drops the connection
 // before any answer is written, and a script would read a working restore as a failure.
@@ -1196,6 +1208,7 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
         // Every prompt row on disk now comes from the backup. The relaunch rebuilds the store anyway,
         // but a write slipping in before it must not trust any of the old hashes.
         store.forget_written_rows();
+        drop_restored_fallbacks(&dir, &scope);
         // A restore that brings settings with it may have switched the picture-text
         // index off while the prompts that stay still carry its text.
         if ocr_was_on && scope != "data" {

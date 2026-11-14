@@ -1031,8 +1031,12 @@ pub(crate) fn announce_language(app: &AppHandle, resolved: &str) {
 // Font family + size for the saved prompt tiles only. size 0 = auto-fit.
 #[tauri::command(async)]
 pub(crate) fn set_tile_style(app: AppHandle, state: State<Db>, font: String, size: u32) {
-    let mut store = lock(&state);
-    store.settings.tile_font = font;
-    store.settings.tile_size = if size == 0 { 0 } else { size.clamp(10, 40) };
-    save_settings(&app, &store.settings);
+    {
+        let mut store = lock(&state);
+        store.settings.tile_font = font;
+        store.settings.tile_size = if size == 0 { 0 } else { size.clamp(10, 40) };
+        save_settings(&app, &store.settings);
+    }
+    // The pills and folders on screen read the tile font and size only when told settings changed.
+    notify_float_settings(&app);
 }
