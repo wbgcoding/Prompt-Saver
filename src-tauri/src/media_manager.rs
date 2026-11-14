@@ -494,26 +494,71 @@ pub(crate) fn media_copy_image(state: State<'_, Db>, name: String) -> Result<(),
     crate::images::copy_image_to_clipboard_as(&url, false).map_err(str::to_string)
 }
 
+// What the manager window asked the main window to do, kept here until the main window pulls
+// it. The event that wakes the main window carries no data: a path, folder or name list taken
+// from an event payload would be whatever any webview chose to emit.
+#[derive(Default)]
+pub(crate) struct ManagerHandoff {
+    open: Mutex<Option<String>>,
+    export: Mutex<Option<ManagerExport>>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub(crate) struct ManagerExport {
+    pub(crate) dir: String,
+    pub(crate) names: Vec<String>,
+}
+
+impl ManagerHandoff {
+    pub(crate) fn put_open(&self, path: String) {
+        *self.open.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+    }
+    pub(crate) fn take_open(&self) -> Option<String> {
+        self.open.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+    pub(crate) fn put_export(&self, dir: String, names: Vec<String>) {
+        *self.export.lock().unwrap_or_else(|e| e.into_inner()) = Some(ManagerExport { dir, names });
+    }
+    pub(crate) fn take_export(&self) -> Option<ManagerExport> {
+        self.export.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+}
+
 // The video editor / screenshot editor lives behind the main window's open-file route: the
 // manager asks the main window to open the file, with a path Rust built from a validated name.
+// The path stays here; the main window pulls it (take_manager_open_file) on the bare signal.
 #[tauri::command(async)]
-pub(crate) fn media_open_in_main(app: AppHandle, state: State<'_, Db>, kind: String, name: String) -> Result<(), String> {
-    let (kind, _, file) = existing_media_file(&state, &kind, &name)?;
-    let _ = app.emit_to("main", "manager-open-file", serde_json::json!({ "kind": kind.as_str(), "path": file.to_string_lossy() }));
+pub(crate) fn media_open_in_main(app: AppHandle, state: State<'_, Db>, handoff: State<'_, ManagerHandoff>, kind: String, name: String) -> Result<(), String> {
+    let (_, _, file) = existing_media_file(&state, &kind, &name)?;
+    handoff.put_open(file.to_string_lossy().into_owned());
+    let _ = app.emit_to("main", "manager-open-file", ());
     Ok(())
 }
 
 // The batch export dialog is the main window's: it gets the recording folder and the names.
 #[tauri::command(async)]
-pub(crate) fn media_export_in_main(app: AppHandle, state: State<'_, Db>, names: Vec<String>) -> Result<(), String> {
+pub(crate) fn media_export_in_main(app: AppHandle, state: State<'_, Db>, handoff: State<'_, ManagerHandoff>, names: Vec<String>) -> Result<(), String> {
     let root = media_root(&state, MediaKind::Recordings);
     let names: Vec<String> = names.into_iter().filter(|n| is_media_name(MediaKind::Recordings, n) && root.join(n).is_file()).collect();
     if names.is_empty() {
         return Ok(());
     }
+    handoff.put_export(root.to_string_lossy().into_owned(), names);
     show_main(&app);
-    let _ = app.emit_to("main", "manager-export", serde_json::json!({ "dir": root.to_string_lossy(), "names": names }));
+    let _ = app.emit_to("main", "manager-export", ());
     Ok(())
+}
+
+// The main window takes the file the manager left for it, once.
+#[tauri::command]
+pub(crate) fn take_manager_open_file(handoff: State<'_, ManagerHandoff>) -> Option<String> {
+    handoff.take_open()
+}
+
+// The main window takes the batch the manager left for it, once.
+#[tauri::command]
+pub(crate) fn take_manager_export(handoff: State<'_, ManagerHandoff>) -> Option<ManagerExport> {
+    handoff.take_export()
 }
 
 // The manager's empty state can point at the setting behind it; only listed keys are forwarded.

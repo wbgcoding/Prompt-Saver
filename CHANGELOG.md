@@ -230,6 +230,9 @@ saving, backups, recordings, the editors and the installer.
 - **Imported, restored and synced attachments.** An attachment that an
   imported, restored or synced file names outside the app's folders is only shown or copied after
   you pick it again.
+- **Media manager handoff.** Opening a file in the editor or starting a batch export from the media
+  manager no longer takes the path, folder or names from a message any window could send; the main
+  window asks the app for the ones it resolved itself.
 
 ## 3.1.0 (2026-10-31)
 

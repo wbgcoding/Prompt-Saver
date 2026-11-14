@@ -20,8 +20,10 @@ export function openScreenshotManager() {
 // batch dialog here, and refresh the folder readout after it moved something to or from the
 // holding folder.
 export function bindMediaManagerEvents({ recordingDir }) {
-  listen("manager-export", (e) => {
-    const { dir, names } = e.payload || {};
+  // The event is only a signal: the folder and names are pulled from the backend, which kept
+  // the validated ones, never read from an event payload any window could emit.
+  listen("manager-export", async () => {
+    const { dir, names } = (await invoke("take_manager_export").catch(() => null)) || {};
     if (dir && Array.isArray(names) && names.length) runBatchExportRecordings(dir, names);
   });
   listen("manager-changed", (e) => {

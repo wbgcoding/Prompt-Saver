@@ -932,6 +932,9 @@ const RESULTS = {
   // just needs to exist so the call is tracked, not error out.
   seed_example_prompts: () => [],
   example_prompts_pending: () => examplePristineIds().length,
+  // What the media manager left for this window; a probe step sets the fixture before firing the signal.
+  take_manager_export: () => { const v = window.__MANAGER_EXPORT__ || null; window.__MANAGER_EXPORT__ = null; return v; },
+  take_manager_open_file: () => { const v = window.__MANAGER_OPEN__ || null; window.__MANAGER_OPEN__ = null; return v; },
   dismiss_example_prompts: () => {
     SETTINGS.example_prompt_ids = [];
     SETTINGS.example_prompt_seeds = {};

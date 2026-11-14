@@ -161,7 +161,8 @@ SECTION = """\
           {
             window.__PICK_FOLDER__ = 'C:\\\\Export\\\\Out';
             window.__BATCH_EXPORT_CALLED__ = null;
-            window.__FIRE__('manager-export', { dir: 'C:\\\\Recordings', names: ['old-recording.mp4'] });
+            window.__MANAGER_EXPORT__ = { dir: 'C:\\\\Recordings', names: ['old-recording.mp4'] };
+            window.__FIRE__('manager-export', null);
             await sleep(200);
             const bModal = document.getElementById('batch-export-modal');
             if (!bModal || bModal.classList.contains('hidden')) {

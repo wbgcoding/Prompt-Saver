@@ -271,3 +271,27 @@ fn the_discarded_screenshots_row_counts_only_the_holding_folder() {
     assert_eq!(discarded_screenshots_row(&dir.join("nothing-here")).count, 0);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn manager_handoff_returns_only_what_the_manager_stored_and_only_once() {
+    let h = ManagerHandoff::default();
+    assert_eq!(h.take_open(), None);
+    assert_eq!(h.take_export(), None);
+
+    h.put_open("C:\\Rec\\rec-a.mp4".to_string());
+    // The export slot is a different door: an open request never shows up there.
+    assert_eq!(h.take_export(), None);
+    assert_eq!(h.take_open(), Some("C:\\Rec\\rec-a.mp4".to_string()));
+    assert_eq!(h.take_open(), None, "a pulled handoff is gone");
+
+    h.put_export("C:\\Rec".to_string(), vec!["rec-a.mp4".to_string()]);
+    assert_eq!(h.take_open(), None);
+    let export = h.take_export().expect("stored export");
+    assert_eq!(export, ManagerExport { dir: "C:\\Rec".to_string(), names: vec!["rec-a.mp4".to_string()] });
+    assert_eq!(h.take_export(), None);
+
+    // A later request replaces an earlier one that was never pulled.
+    h.put_open("a".to_string());
+    h.put_open("b".to_string());
+    assert_eq!(h.take_open(), Some("b".to_string()));
+}

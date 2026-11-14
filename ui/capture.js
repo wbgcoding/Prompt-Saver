@@ -165,9 +165,11 @@ export function bindCapture() {
     await openExternalFileInEditor(path);
   }
   listen("edit-image-request", () => { openRequestedEditImage(); });
-  // The media manager window hands a file over to the editors, which live in this window.
-  listen("manager-open-file", async (e) => {
-    const path = e.payload?.path;
+  // The media manager window hands a file over to the editors, which live in this window. The
+  // event is only a signal: the path is pulled from the backend, which stored the one it
+  // resolved, never read from an event payload any window could emit.
+  listen("manager-open-file", async () => {
+    const path = await invoke("take_manager_open_file").catch(() => null);
     if (!path) return;
     if (snipEditState().active && !(await snipEditRequestClose({ replacing: true }))) return;
     await openExternalFileInEditor(path);

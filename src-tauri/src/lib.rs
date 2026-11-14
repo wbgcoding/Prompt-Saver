@@ -432,6 +432,7 @@ pub fn run() {
             app.manage(ParkedFloats(Mutex::new(HashMap::new())));
             app.manage(DragHint(Mutex::new((0, None)))); // live merge highlight
             app.manage(VarPrompt::new()); // standalone fill-in window
+            app.manage(media_manager::ManagerHandoff::default()); // what the media manager hands to the main window
             app.manage(VideoEditorPending::new()); // video editor's pending target path
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false))); // live dictation session
@@ -1157,6 +1158,8 @@ pub fn run() {
             media_manager::media_open_in_main,
             media_manager::media_export_in_main,
             media_manager::media_open_setting,
+            media_manager::take_manager_open_file,
+            media_manager::take_manager_export,
             camera::camera_begin_recording,
             camera::camera_append_chunk,
             camera::camera_permission_ready,
