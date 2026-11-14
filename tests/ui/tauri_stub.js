@@ -501,7 +501,7 @@ const RESULTS = {
   // 334: the image-overlay "Add" button picks a file before it can add its
   // op -- a fixed fake path is enough to exercise the add flow and the live
   // preview's <img> element; the path never actually needs to resolve.
-  pick_file_path: () => "C:\\Pictures\\ps-smoke-badge.png",
+  pick_file_path: () => window.__PICK_FILE_PATH__ || "C:\\Pictures\\ps-smoke-badge.png",
   // Right-click the screenshot/record button (or a library attachment) to
   // open an existing file in whichever editor its content calls for.
   // window.__OPEN_EDIT_PICK__ lets a probe steer which path the "pick a
@@ -1692,7 +1692,10 @@ window.__TAURI__ = {
     // Real Tauri turns a filesystem path into a loadable "asset://..." URL --
     // the stub just needs SOMETHING stable so a <video>/<img> src assignment
     // does not throw when a probe exercises a real-file preview path.
-    convertFileSrc: (path) => (String(path).startsWith("POSTER:") ? mmPosterSvg(String(path).slice(7)) : `asset://localhost/${encodeURIComponent(path)}`),
+    // The badge picture of the image-overlay fixture decodes (a real 1x1 image); every other path
+    // stays an asset URL the headless page cannot load, which is what a broken file looks like.
+    convertFileSrc: (path) => (String(path).startsWith("POSTER:") ? mmPosterSvg(String(path).slice(7))
+      : String(path).endsWith("ps-smoke-badge.png") ? STUB_IMAGE : `asset://localhost/${encodeURIComponent(path)}`),
   },
   event: {
     listen: async (event, fn) => {

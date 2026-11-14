@@ -721,6 +721,7 @@ export default {
     veOvRemoveArmed: "Rimuovere?",
     veKeysSampleHint: "Il tasto evidenziato mostra l'aspetto di un tasto premuto.",
     veOvImageQuote: "Qui non è possibile usare un apostrofo nel percorso del file. Rinomina il file o spostalo in un'altra cartella.",
+    veOvNotImage: "Questo file non è un'immagine.",
     veTickError: "L'anteprima video ha riscontrato un problema e ha smesso di aggiornarsi; l'esportazione stessa non ne risente.",
     numFieldDecrease: "Diminuisci valore",
     numFieldIncrease: "Aumenta valore",

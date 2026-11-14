@@ -3,7 +3,7 @@ import { numberField, parseFfmpegError } from "./floatShared.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { keysPickerRow } from "./videoKeys.js";
-import { $, clamp, deleteOp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, overlayName, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
+import { $, clamp, convertFileSrc, deleteOp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, overlayName, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
 import { renderRects, snapRect } from "./videoPreview.js";
 
 // ---------------------------------------------------------------- overlays
@@ -54,6 +54,22 @@ async function pickPath(args) {
 const IMAGE_PICK = () => ({ kind: "image", filterLabel: t("pickFilterImages"), allLabel: t("pickFilterAll") });
 const VIDEO_PICK = () => ({ kind: "video", filterLabel: t("pickFilterVideos"), allLabel: t("pickFilterAll") });
 
+// The picker's image filter is only a suggestion (the dialog can be switched to all files and a
+// path can be typed), so the chosen file is checked here: an image extension the export accepts
+// and a file the page can decode. TIFF is not decodable by the page, so it passes on its name.
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|bmp|webp|tiff?|apng|avif|jfif)$/i;
+const IMAGE_NO_DECODE_RE = /\.tiff?$/i;
+async function isPicture(path) {
+  if (!IMAGE_EXT_RE.test(path)) return false;
+  if (IMAGE_NO_DECODE_RE.test(path)) return true;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = convertFileSrc(path);
+  });
+}
+
 export async function addOverlay(kind) {
   // Same race as startAddVideo: a button live from first paint that builds text with t() at
   // click time needs the lazy i18n import landed first.
@@ -70,6 +86,8 @@ export async function addOverlay(kind) {
     // An apostrophe in the path has no escape ffmpeg's filter parser accepts, so
     // it is refused here with a reason instead of failing at export time.
     if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
+    if (!(await isPicture(path))) { toast(t("veOvNotImage")); return; }
+    if (VE.loadGen !== gen) return;
     const rect = centeredRect(0.3);
     op = { ...base, path, rect, opacity: VE.ovImageOpacityDefault ?? 100 };
   } else if (kind === "frame") {
@@ -675,6 +693,8 @@ export function renderOverlayEditor() {
       const path = await pickPath(IMAGE_PICK());
       if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
+      if (!(await isPicture(path))) { toast(t("veOvNotImage")); return; }
+      if (!overlayStillInEditor(op, gen)) return;
       commitOverlay(op, { path });
     });
     box.appendChild(change);

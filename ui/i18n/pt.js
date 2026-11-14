@@ -721,6 +721,7 @@ export default {
     veOvRemoveArmed: "Remover?",
     veKeysSampleHint: "A tecla destacada mostra como fica uma tecla pressionada.",
     veOvImageQuote: "Não é possível usar um apóstrofo no caminho do arquivo aqui. Renomeie o arquivo ou mova-o para outra pasta.",
+    veOvNotImage: "Este arquivo não é uma imagem.",
     veTickError: "A pré-visualização do vídeo encontrou um problema e parou de atualizar; a exportação em si não é afetada.",
     numFieldDecrease: "Diminuir valor",
     numFieldIncrease: "Aumentar valor",

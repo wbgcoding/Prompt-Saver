@@ -721,6 +721,7 @@ export default {
     veOvRemoveArmed: "Kaldırılsın mı?",
     veKeysSampleHint: "Vurgulanan tuş, basılı bir tuşun nasıl göründüğünü gösterir.",
     veOvImageQuote: "Dosya yolundaki kesme işareti burada kullanılamaz. Dosyayı yeniden adlandırın veya başka bir klasöre taşıyın.",
+    veOvNotImage: "Bu dosya bir resim değil.",
     veTickError: "Video önizlemesi bir sorunla karşılaştı ve güncellenmeyi durdurdu; dışa aktarmanın kendisi bundan etkilenmez.",
     numFieldDecrease: "Değeri azalt",
     numFieldIncrease: "Değeri artır",

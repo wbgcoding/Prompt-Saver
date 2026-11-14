@@ -767,6 +767,30 @@ def run(browser, tmp):
     await exercise('cut', '#ve-regions .ve-cut', cutOp, resetCut);
     """)
 
+    # The image overlay only takes a picture: an other file typed into the dialog adds nothing.
+    failed += vprobe('imgcheck', 'the image overlay add refuses a file that is not a picture', r"""
+    // 90-imgcheck:
+    const { addOverlay } = await import('./videoOverlays.js');
+    const toastEl = document.getElementById('ve-toast');
+    const ovCount = () => VE.ops.filter((o) => o.tool === 'overlay').length;
+    const tryAdd = async (path) => {
+      window.__PICK_FILE_PATH__ = path;
+      toastEl.classList.add('hidden'); toastEl.textContent = '';
+      const before = ovCount();
+      await addOverlay('image'); await sleep(250);
+      return { added: ovCount() - before, toast: toastEl.classList.contains('hidden') ? '' : toastEl.textContent };
+    };
+    const bad = await tryAdd('C:/Videos/clip.mp4');
+    if (bad.added !== 0) errs.push('90-imgcheck: an .mp4 name made an image overlay');
+    if (bad.toast !== 'This file is not a picture.') errs.push('90-imgcheck: the .mp4 name shows the toast "' + bad.toast + '"');
+    const broken = await tryAdd('C:/Pictures/broken.png');
+    if (broken.added !== 0) errs.push('90-imgcheck: a .png name that does not load as a picture made an overlay');
+    if (broken.toast !== 'This file is not a picture.') errs.push('90-imgcheck: the unloadable .png shows the toast "' + broken.toast + '"');
+    const good = await tryAdd('C:/Pictures/ps-smoke-badge.png');
+    if (good.added !== 1) errs.push('90-imgcheck: a real picture added ' + good.added + ' overlays');
+    if (good.toast) errs.push('90-imgcheck: a real picture shows the toast "' + good.toast + '"');
+    """)
+
     # A name that would make the file name longer than 200 characters is refused inline.
     failed += vprobe('namelen', 'an over-long export name shows its own hint and blocks Export', r"""
     // 90-namelen:

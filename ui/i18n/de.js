@@ -698,6 +698,7 @@ export default {
     veOvRemoveArmed: "Entfernen?",
     veKeysSampleHint: "Die hervorgehobene Taste zeigt, wie eine gedrückte Taste aussieht.",
     veOvImageQuote: "Ein Apostroph im Dateipfad ist hier nicht verwendbar. Benenne die Datei um oder verschiebe sie in einen anderen Ordner.",
+    veOvNotImage: "Diese Datei ist kein Bild.",
     veTickError: "Die Video-Vorschau ist auf ein Problem gestoßen und aktualisiert sich nicht mehr; der Export selbst ist davon nicht betroffen.",
     numFieldDecrease: "Wert verringern",
     numFieldIncrease: "Wert erhöhen",

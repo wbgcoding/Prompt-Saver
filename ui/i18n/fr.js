@@ -697,6 +697,7 @@ export default {
     veOvRemoveArmed: "Supprimer ?",
     veKeysSampleHint: "La touche en surbrillance montre l'aspect d'une touche pressée.",
     veOvImageQuote: "Une apostrophe dans le chemin du fichier ne peut pas être utilisée ici. Renommez le fichier ou déplacez-le dans un autre dossier.",
+    veOvNotImage: "Ce fichier n'est pas une image.",
     veTickError: "L'aperçu vidéo a rencontré un problème et ne se met plus à jour ; l'export lui-même n'est pas affecté.",
     numFieldDecrease: "Diminuer la valeur",
     numFieldIncrease: "Augmenter la valeur",

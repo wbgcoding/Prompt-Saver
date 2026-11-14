@@ -721,6 +721,7 @@ export default {
     veOvRemoveArmed: "Usunąć?",
     veKeysSampleHint: "Wyróżniony klawisz pokazuje, jak wygląda wciśnięty klawisz.",
     veOvImageQuote: "Nie można tutaj użyć apostrofu w ścieżce pliku. Zmień nazwę pliku lub przenieś go do innego folderu.",
+    veOvNotImage: "Ten plik nie jest obrazem.",
     veTickError: "Podgląd wideo napotkał problem i przestał się aktualizować; sam eksport nie jest tym dotknięty.",
     numFieldDecrease: "Zmniejsz wartość",
     numFieldIncrease: "Zwiększ wartość",
