@@ -111,6 +111,7 @@ export const EXTRA_CLIPS_MAX = 10;
 export const VE = {
   src: "",
   originDir: "", // set only for a copy of a file opened for editing from outside the app
+  overlayPath: "", // the camera take recorded beside this source, kept so a reload can add it again
   probe: null,          // RecordingProbe, or a locally guessed one without ffmpeg
   ffmpeg: true,         // false once a call reported "ffmpeg-missing"
   dur: 0,               // source duration in ms
@@ -1607,6 +1608,11 @@ function updateScaleCurrent() {
 }
 
 // ---------------------------------------------------------------- panels + wiring
+// Loads the open source again with everything its first load was given, so the export folder
+// of a copy opened from outside the app and the camera overlay survive the reload.
+function reloadCurrentSource() {
+  return loadRecording(VE.src, VE.originDir, VE.overlayPath);
+}
 $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   // A click on the running download cancels it; a new one asks first, like the expert menu.
@@ -1631,7 +1637,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
       toast(t("ffmpegDownloadDone"));
       // Unexported edits stay: a reload would wipe them, and the strip and waveforms are all that
       // were waiting for ffmpeg.
-      if (VE.ops.length && VE.dirty) { loadStrip(); scheduleWaves(); } else await loadRecording(VE.src);
+      if (VE.ops.length && VE.dirty) { loadStrip(); scheduleWaves(); } else await reloadCurrentSource();
     },
     onError: (err) => toast(errMessageLogged(err, t, "video")),
   });

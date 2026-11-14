@@ -470,7 +470,7 @@ async function closeAskChecks() {
   expect("source switch: asks through askUnsavedEdits", loadHandler.includes("await askUnsavedEdits()") && !loadHandler.includes("confirmDialog"), "");
   expect("source switch: Save stores the draft first", /choice === "save"[\s\S]{0,160}saveEditStateNow\(\)/.test(loadHandler), "");
   const onDone = src.slice(src.indexOf("onDone: async () => {"), src.indexOf("onError: (err) => toast(errMessageLogged(err, t, \"video\"))"));
-  expect("ffmpeg download: keeps unexported edits", /if \(VE\.ops\.length && VE\.dirty\) \{ loadStrip\(\); scheduleWaves\(\); \} else await loadRecording\(VE\.src\);/.test(onDone), onDone);
+  expect("ffmpeg download: keeps unexported edits", /if \(VE\.ops\.length && VE\.dirty\) \{ loadStrip\(\); scheduleWaves\(\); \} else await reloadCurrentSource\(\);/.test(onDone), onDone);
   // A second request while the question is open is ignored (Alt+F4 pressed twice).
   const stub = winStub();
   let asked = 0;
@@ -1331,6 +1331,17 @@ const pending = [];
   expect("redo gives the floor back exactly as it was", sb.VE.floor === 1, String(sb.VE.floor));
   run("undo()"); run("redo()");
   expect("a second undo and redo keeps it", sb.VE.floor === 1, String(sb.VE.floor));
+}
+
+// The reload after an ffmpeg download hands the load everything the first load had: the export
+// folder of an outside copy and the camera overlay.
+{
+  const calls = [];
+  const sb = makeSandbox({ loadRecording: (...a) => calls.push(a) });
+  sb.VE = { src: "C:/tmp/copy.mp4", originDir: "D:/orig", overlayPath: "C:/tmp/cam.mp4" };
+  vm.runInContext(extractBlock("reloadCurrentSource", "function reloadCurrentSource() {"), sb);
+  vm.runInContext("reloadCurrentSource()", sb);
+  expect("reload keeps the origin folder and the overlay", JSON.stringify(calls) === JSON.stringify([["C:/tmp/copy.mp4", "D:/orig", "C:/tmp/cam.mp4"]]), JSON.stringify(calls));
 }
 
 // A live overlay video that is removed from the timeline is released like one cleared with the
