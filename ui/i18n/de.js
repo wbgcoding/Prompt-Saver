@@ -541,6 +541,7 @@ export default {
     vePlay: "Abspielen",
     vePause: "Pause",
     veNextFrame: "Ein Bild vorwärts",
+    veJump1s: "1 Sekunde zurück oder vor",
     veToEnd: "An das Ende des behaltenen Teils springen",
     veToSourceEnd: "An das Ende der Aufnahme springen",
     veFrameTip: "Bildnummer an der Abspielposition",

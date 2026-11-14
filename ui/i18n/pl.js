@@ -564,6 +564,7 @@ export default {
     vePlay: "Odtwórz",
     vePause: "Wstrzymaj",
     veNextFrame: "Jedna klatka do przodu",
+    veJump1s: "Przeskocz o 1 sekundę wstecz lub do przodu",
     veToEnd: "Przejdź na koniec zachowanej części",
     veToSourceEnd: "Przejdź na koniec nagrania",
     veFrameTip: "Numer klatki w pozycji głowicy odtwarzania",

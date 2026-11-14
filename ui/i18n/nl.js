@@ -564,6 +564,7 @@ export default {
     vePlay: "Afspelen",
     vePause: "Pauzeren",
     veNextFrame: "Eén frame vooruit",
+    veJump1s: "1 seconde terug of vooruit springen",
     veToEnd: "Naar einde van het behouden deel",
     veToSourceEnd: "Naar einde van de opname",
     veFrameTip: "Framenummer bij de afspeelkop",

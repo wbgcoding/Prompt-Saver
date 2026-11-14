@@ -541,6 +541,7 @@ export default {
     vePlay: "Play",
     vePause: "Pause",
     veNextFrame: "One frame forward",
+    veJump1s: "Jump 1 second back or forward",
     veToEnd: "Jump to the end of the kept part",
     veToSourceEnd: "Jump to the end of the recording",
     veFrameTip: "Frame number at the playhead",

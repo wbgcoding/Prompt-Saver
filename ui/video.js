@@ -1365,7 +1365,7 @@ function endTimelineDrag() {
 regionsEl.addEventListener("pointerup", endTimelineDrag);
 regionsEl.addEventListener("pointercancel", endTimelineDrag);
 
-// Ctrl+wheel zooms around the playhead; a plain wheel scrolls the timeline
+// Ctrl+wheel zooms under the pointer; a plain wheel scrolls the timeline
 // sideways, which is the only direction it can go.
 timelineEl.addEventListener("wheel", (e) => {
   if (e.ctrlKey) {
@@ -1748,6 +1748,13 @@ const veOriginalToggle = makeHoldOrTapToggle((shown) => {
   $("ve-original-badge").classList.toggle("hidden", !shown);
 });
 $("ve-original").addEventListener("pointerdown", () => veOriginalToggle.press());
+// Enter or Space on the focused button arrives as a click without a pointer (detail 0): treat it
+// as a tap, which locks the original view on or off.
+$("ve-original").addEventListener("click", (e) => {
+  if (e.detail !== 0) return;
+  veOriginalToggle.press();
+  veOriginalToggle.release();
+});
 document.addEventListener("pointerup", () => veOriginalToggle.release());
 document.addEventListener("pointercancel", () => veOriginalToggle.release());
 window.addEventListener("blur", () => veOriginalToggle.reset());

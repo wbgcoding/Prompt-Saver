@@ -564,6 +564,7 @@ export default {
     vePlay: "Reproduzir",
     vePause: "Pausar",
     veNextFrame: "Um quadro para frente",
+    veJump1s: "Saltar 1 segundo para trás ou para a frente",
     veToEnd: "Ir para o fim da parte mantida",
     veToSourceEnd: "Ir para o fim da gravação",
     veFrameTip: "Número do quadro na posição do cursor de reprodução",

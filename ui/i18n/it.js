@@ -564,6 +564,7 @@ export default {
     vePlay: "Riproduci",
     vePause: "Pausa",
     veNextFrame: "Un fotogramma avanti",
+    veJump1s: "Salta 1 secondo indietro o avanti",
     veToEnd: "Vai alla fine della parte mantenuta",
     veToSourceEnd: "Vai alla fine della registrazione",
     veFrameTip: "Numero del fotogramma in corrispondenza dell'indicatore di riproduzione",

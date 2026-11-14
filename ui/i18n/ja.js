@@ -564,6 +564,7 @@ export default {
     vePlay: "再生",
     vePause: "一時停止",
     veNextFrame: "1フレーム進む",
+    veJump1s: "1秒戻る・進む",
     veToEnd: "残す部分の末尾へ移動",
     veToSourceEnd: "録画の末尾へ移動",
     veFrameTip: "再生ヘッド位置のフレーム番号",

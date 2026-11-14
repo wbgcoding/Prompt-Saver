@@ -540,6 +540,7 @@ export default {
     vePlay: "Lire",
     vePause: "Pause",
     veNextFrame: "Une image en avant",
+    veJump1s: "Sauter 1 seconde en arrière ou en avant",
     veToEnd: "Aller à la fin de la partie conservée",
     veToSourceEnd: "Aller à la fin de l'enregistrement",
     veFrameTip: "Numéro de l'image à la tête de lecture",

@@ -1066,6 +1066,15 @@ VIDEO_PROBE = """
         document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', bubbles: true }));
         await sleep(30);
         if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing V did not restore the overlay layer');
+        // A keyboard activation (Enter or Space on the focused button) arrives as a click with
+        // detail 0 and must toggle the locked view like a quick pointer tap.
+        origBtn398.focus();
+        origBtn398.click();
+        await sleep(30);
+        if (origBadge398.classList.contains('hidden')) errs.push('keyboard activation of the show-original button did not turn the original on');
+        origBtn398.click();
+        await sleep(30);
+        if (!origBadge398.classList.contains('hidden')) errs.push('a second keyboard activation of the show-original button did not turn it off');
       }
     }
 

@@ -564,6 +564,7 @@ export default {
     vePlay: "播放",
     vePause: "暂停",
     veNextFrame: "前进一帧",
+    veJump1s: "后退或前进 1 秒",
     veToEnd: "跳到保留部分的结尾",
     veToSourceEnd: "跳到录像结尾",
     veFrameTip: "播放头所在的帧编号",

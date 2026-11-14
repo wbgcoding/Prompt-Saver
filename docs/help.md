@@ -590,7 +590,8 @@ their usual job.
 
 A toolbar button in either editor compares against the untouched capture:
 hold it down to peek at the original for as long as it is held, or tap it to
-lock that view on until tapped again. The V key does the same, and a small
+lock that view on until tapped again. The V key does the same (in the video editor so do Enter
+and Space on the focused button), and a small
 "Original" badge appears whenever it is showing so it is never mistaken for
 the edit. In the video editor this only hides overlays (fades and the export
 resolution never show in the live preview to begin with), and the current
@@ -1454,7 +1455,8 @@ gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
 Ein Button in der Werkzeugleiste beider Editoren vergleicht mit der
 unbearbeiteten Aufnahme: gedrückt gehalten zeigt er das Original, solange er
 gehalten wird, ein Klick lässt diese Ansicht stehen, bis erneut geklickt wird.
-Dieselbe Taste V tut dasselbe, und eine kleine Marke „Original“ erscheint,
+Dieselbe Taste V tut dasselbe (im Video-Editor ebenso Enter und Leertaste auf dem fokussierten
+Button), und eine kleine Marke „Original“ erscheint,
 solange es zu sehen ist, damit es nie für die Bearbeitung gehalten wird. Im
 Video-Editor blendet das nur Überlagerungen aus (Blenden und die Export-
 Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt

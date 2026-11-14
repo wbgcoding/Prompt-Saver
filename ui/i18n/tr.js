@@ -564,6 +564,7 @@ export default {
     vePlay: "Oynat",
     vePause: "Duraklat",
     veNextFrame: "Bir kare ileri",
+    veJump1s: "1 saniye geri veya ileri atla",
     veToEnd: "Korunan bölümün sonuna git",
     veToSourceEnd: "Kaydın sonuna git",
     veFrameTip: "Oynatma kafasındaki kare numarası",

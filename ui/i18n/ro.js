@@ -564,6 +564,7 @@ export default {
     vePlay: "Redă",
     vePause: "Pauză",
     veNextFrame: "Un cadru înainte",
+    veJump1s: "Sari 1 secundă înapoi sau înainte",
     veToEnd: "Salt la sfârșitul părții păstrate",
     veToSourceEnd: "Salt la sfârșitul înregistrării",
     veFrameTip: "Numărul cadrului la capul de redare",
