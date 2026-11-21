@@ -85,7 +85,7 @@ function paintProgress() {
   wrap.querySelector(".whisper-progress-cancel").disabled = download.cancelling;
 }
 
-function card(m, active) {
+function modelCard(m, active) {
   const row = document.createElement("div");
   row.className = "clip-row whisper-card" + (m.id === active ? " is-active" : "");
   row.dataset.model = m.id;
@@ -141,11 +141,11 @@ function render() {
   warn.classList.toggle("hidden", catalog.supported);
   warn.textContent = catalog.supported ? "" : t("voiceWhisperCpu");
   const active = activeWhisperModel(catalog, settings.ui_texts?.whisperModel);
-  for (const m of catalog.models) body.appendChild(card(m, active));
+  for (const m of catalog.models) body.appendChild(modelCard(m, active));
   paintProgress();
 }
 
-async function refresh() {
+async function refreshModels() {
   await loadCatalog();
   render();
 }
@@ -180,7 +180,7 @@ async function downloadModel(m) {
     }
   }
   download = null;
-  await refresh();
+  await refreshModels();
 }
 
 function cancelDownload() {
@@ -207,13 +207,13 @@ async function deleteModel(m) {
   } catch (e) {
     errToast(e);
   }
-  await refresh();
+  await refreshModels();
 }
 
 export async function openWhisperModels() {
   $("whisper-models-modal").classList.remove("hidden");
   render();
-  await refresh();
+  await refreshModels();
   $("whisper-models-close-x").focus();
 }
 
