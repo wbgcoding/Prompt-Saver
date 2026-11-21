@@ -217,7 +217,7 @@ body.mm-viewing .mm-footer { display: none !important; }
   flex: 0 0 auto;
   min-width: 0;
 }
-.mm-view-back { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.mm-view-back { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: 6px; white-space: nowrap; }
 .mm-view-info { flex: 1 1 auto; min-width: 0; }
 .mm-view-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
 .mm-view-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
