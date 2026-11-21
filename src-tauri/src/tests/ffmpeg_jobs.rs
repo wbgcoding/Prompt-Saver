@@ -408,7 +408,7 @@ fn ffmpeg_search_path_never_touches_path_or_a_system_directory() {
     // and in PATH: confirming the constants/logic never reference a system
     // directory or attempt to modify PATH is a static-shape check, not a
     // runtime one (there is no writable AppHandle in this pure unit test).
-    assert_eq!(FFMPEG_ZIP_ENTRY, "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe");
+    assert_eq!(FFMPEG_ZIP_ENTRY, "ffmpeg-9.1-essentials_build/bin/ffmpeg.exe");
     assert!(FFMPEG_URL.starts_with("https://github.com/GyanD/codexffmpeg/releases/download/"));
     assert_eq!(FFMPEG_SHA256.len(), 64);
 }
@@ -717,13 +717,22 @@ fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
     let (data, local) = (root.join("data"), root.join("local"));
     fs::create_dir_all(&data).unwrap();
     let bytes = b"pinned build bytes";
-    let want: String = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(bytes));
+    let hex: String = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(bytes));
+    let want = [hex.as_str()];
 
     // The pinned copy moves, and the old place is empty afterwards.
     fs::write(data.join("ffmpeg.exe"), bytes).unwrap();
     assert_eq!(migrate_old_media_tool(&data.join("ffmpeg.exe"), &local, &want), OldToolFate::Moved);
     assert_eq!(fs::read(local.join("ffmpeg.exe")).unwrap(), bytes);
     assert!(!data.join("ffmpeg.exe").exists());
+
+    // A build pinned by an earlier version counts as well, not only the current one.
+    let older = b"older pinned build";
+    let older_hex = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(older));
+    fs::write(data.join("ffprobe.exe"), older).unwrap();
+    assert_eq!(migrate_old_media_tool(&data.join("ffprobe.exe"), &local, &[hex.as_str(), older_hex.as_str()]), OldToolFate::Moved);
+    assert_eq!(fs::read(local.join("ffprobe.exe")).unwrap(), older);
+    fs::remove_file(local.join("ffprobe.exe")).unwrap();
 
     // Any other file under the name is never moved to the per-user folder and no longer sits
     // under a program name, but it is kept (it may be the user's own ffmpeg), not deleted.
@@ -754,6 +763,15 @@ fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
     // The pinned hashes are the shipped executables' hashes.
     assert_eq!(FFMPEG_EXE_SHA256.len(), 64);
     assert_eq!(FFPROBE_EXE_SHA256.len(), 64);
+    // The current build is always one of the known ones, and the 9.0.1 copies earlier versions
+    // downloaded still move instead of being set aside.
+    assert_eq!(FFMPEG_EXE_KNOWN_SHA256[0], FFMPEG_EXE_SHA256);
+    assert_eq!(FFPROBE_EXE_KNOWN_SHA256[0], FFPROBE_EXE_SHA256);
+    assert!(FFMPEG_EXE_KNOWN_SHA256.contains(&"72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3"));
+    assert!(FFPROBE_EXE_KNOWN_SHA256.contains(&"19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52f"));
+    for h in FFMPEG_EXE_KNOWN_SHA256.iter().chain(FFPROBE_EXE_KNOWN_SHA256.iter()) {
+        assert!(h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()));
+    }
     let _ = fs::remove_dir_all(&root);
 }
 

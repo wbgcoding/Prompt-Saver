@@ -174,7 +174,7 @@ and put it in `src-tauri/` before building, since the build fails without it.
 Video export/conversion shells out to ffmpeg, which the installer ships as a
 plain file rather than compiling in. Download the gyan.dev "essentials" build
 (currently pinned to release
-[9.0.1](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)), extract
+[9.1](https://github.com/GyanD/codexffmpeg/releases/tag/9.1)), extract
 `ffmpeg.exe` and `ffprobe.exe` from the zip's `bin/` folder and the zip's root `LICENSE` file (save it as
 `ffmpeg-LICENSE`) and put all three in `src-tauri/` before building, since the installer
 bundle step fails without them (the portable exe still builds fine; it offers to

@@ -84,9 +84,13 @@ saving, backups, recordings, the editors and the installer.
   automatic updates on the right, with About and Expert menu below.
 - **New pin icon.** The always-on-top icon is redrawn and no longer looks cut
   off at the top.
+- **FFmpeg 9.1.** The installer ships, and the portable version downloads, FFmpeg 9.1 instead
+  of 9.0.1. A copy of the older build that an earlier version downloaded keeps working.
 
 ### Fixed
 
+- **Tray menu on several screens.** With screens at different scaling, the tray menu could open
+  too large and drawn at the wrong size; it now always matches the screen it opens on.
 - **Video editor after a fresh install.** The installer now also ships ffprobe, so recordings
   open in the video editor and show their length right away instead of waiting for a download.
 - **Video editor keyboard.** Enter and Space on the focused "Original" button now toggle the

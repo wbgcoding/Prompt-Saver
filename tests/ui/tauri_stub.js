@@ -1030,7 +1030,7 @@ const RESULTS = {
     generatedFromCrateCount: 1,
     entries: [
       { name: "examplecrate", version: "1.0.0", license: "MIT OR Apache-2.0", licenseId: "MIT", note: null },
-      { name: "FFmpeg", version: "9.0.1", license: "GPL-3.0-or-later", licenseId: "GPL-3.0-or-later", note: "Runs as a separate subprocess." },
+      { name: "FFmpeg", version: "9.1", license: "GPL-3.0-or-later", licenseId: "GPL-3.0-or-later", note: "Runs as a separate subprocess." },
       { name: "SQLite", version: "bundled", license: "Public Domain", licenseId: null, note: null },
     ],
     licenseTexts: {

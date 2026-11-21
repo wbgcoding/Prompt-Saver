@@ -537,6 +537,19 @@ pub(super) fn sample_pixel_rgb24(ffmpeg: &Path, path: &Path, x: u32, y: u32) -> 
     [out.stdout[0], out.stdout[1], out.stdout[2]]
 }
 
+// The overlay colour comes back through a lossy H.264 encode and a yuv420p -> rgb24 conversion
+// whose rounding differs between ffmpeg releases by a step or two per channel (9.0.1 read the
+// white border as 255, 9.1 as 253). A few steps of slack still tells the overlay apart from the
+// test pattern under it, which is what these tests prove.
+pub(super) const PIXEL_SLACK: u8 = 4;
+
+pub(super) fn assert_rgb_near(got: [u8; 3], want: [u8; 3], what: &str) {
+    assert!(
+        got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= PIXEL_SLACK),
+        "{what}: got {got:?}, want {want:?} (within {PIXEL_SLACK} per channel)"
+    );
+}
+
 pub(super) fn run_overlay_export(ffmpeg: &Path, src: &Path, dest: &Path, filter_chain: String) {
     let req = ExportRequest {
         src_path: src.to_string_lossy().to_string(),
@@ -570,7 +583,8 @@ fn export_video_real_ffmpeg_frame_overlay_draws_a_visible_border() {
         "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
              [v0]drawbox=x=0:y=0:w=64:h=48:color=0xffffff@1.00:t=4:enable='between(t,0.000,1.000)'[v1];\
              [v1]null[vout]".to_string());
-    assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 0, 0), [255, 255, 255], "the drawbox border must be pure white");
+    assert_rgb_near(sample_pixel_rgb24(&ffmpeg, &dest, 0, 0), [255, 255, 255], "the drawbox border must be white");
+    assert!(sample_pixel_rgb24(&ffmpeg, &src, 0, 0).iter().any(|c| *c < 255 - 2 * PIXEL_SLACK), "the source under the border is not white already");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -598,7 +612,9 @@ fn export_video_real_ffmpeg_image_overlay_composites_the_picture() {
              movie='{badge_ff}'[img0];[img0]scale=10:10,format=rgba,colorchannelmixer=aa=1.00[img1];\
              [v0][img1]overlay=5:5:enable='between(t,0.000,1.000)'[v1];[v1]null[vout]"
     ));
-    assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 6, 6), [252, 0, 0], "the overlaid badge must show its red pixels");
+    assert_rgb_near(sample_pixel_rgb24(&ffmpeg, &dest, 6, 6), [252, 0, 0], "the overlaid badge must show its red pixels");
+    let under = sample_pixel_rgb24(&ffmpeg, &src, 6, 6);
+    assert!(under.iter().zip([252u8, 0, 0]).any(|(g, w)| g.abs_diff(w) > 2 * PIXEL_SLACK), "the source under the badge is not red already: {under:?}");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -653,7 +669,7 @@ fn export_video_real_ffmpeg_text_overlay_draws_its_outline() {
     // 3px ring but outside the letter itself: confirmed empirically against
     // this exact filter string. The plate-box test above shows the same spot
     // is a plain, non-black test-pattern texel with no overlay at all.
-    assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 8, 2), [17, 17, 17],
+    assert_rgb_near(sample_pixel_rgb24(&ffmpeg, &dest, 8, 2), [17, 17, 17],
         "the drawtext outline must paint its border colour around the caption");
     let _ = fs::remove_dir_all(&dir);
 }

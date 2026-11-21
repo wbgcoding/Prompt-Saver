@@ -8,20 +8,25 @@ use super::*;
 // only requires the licence text and a source pointer (see THIRD-PARTY-NOTICES.md), as OBS
 // Studio does, and does not affect this app's own licensing.
 pub(crate) const FFMPEG_URL: &str =
-    "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
-pub(crate) const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
+    "https://github.com/GyanD/codexffmpeg/releases/download/9.1/ffmpeg-9.1-essentials_build.zip";
+pub(crate) const FFMPEG_SHA256: &str = "b9bbbb3acece000cbeec994f856649354e52c773807841e78908374b24d658fd";
 // SHA-256 of the two executables inside that archive (the copies shipped beside the installer).
-// A copy an earlier version left in the data folder moves to the per-user folder only when it
-// is byte for byte one of these (see `migrate_old_media_tools`).
-pub(crate) const FFMPEG_EXE_SHA256: &str = "72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3";
-pub(crate) const FFPROBE_EXE_SHA256: &str = "19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52f";
-pub(crate) const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
+pub(crate) const FFMPEG_EXE_SHA256: &str = "ed8f66cb877087a96f5bbb40a2944f0e764f2ad8870d5cb647360d912e62bc07";
+pub(crate) const FFPROBE_EXE_SHA256: &str = "df0199f606faa88e9ad192732a7c3987acfb647663534c297772e17730611a08";
+// A copy an earlier version left in the data folder moves to the per-user folder only when it is
+// byte for byte a build this app pinned at some point: the current one or the 9.0.1 build before
+// it (see `migrate_old_media_tools`).
+pub(crate) const FFMPEG_EXE_KNOWN_SHA256: [&str; 2] =
+    [FFMPEG_EXE_SHA256, "72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3"];
+pub(crate) const FFPROBE_EXE_KNOWN_SHA256: [&str; 2] =
+    [FFPROBE_EXE_SHA256, "19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52f"];
+pub(crate) const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.1-essentials_build/bin/ffmpeg.exe";
 // The video editor needs structured probing (duration, fps, dimensions, stream count for the
 // mic-mux check) that ffmpeg's banner text cannot give reliably but ffprobe's JSON can. Same
 // zip and already verified hash (FFMPEG_SHA256 covers the whole archive), so a second entry
 // needs no extra pinned hash.
-pub(crate) const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe";
-// The zip is ~106 MB (it also carries ffplay.exe, never extracted); the cap is generous so a
+pub(crate) const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.1-essentials_build/bin/ffprobe.exe";
+// The zip is ~120 MB (it also carries ffplay.exe, never extracted); the cap is generous so a
 // legitimate download is never mistaken for a truncation attempt.
 pub(crate) const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
 
@@ -418,13 +423,13 @@ fn set_old_tool_aside(old: &Path) -> bool {
     fs::rename(old, &target).is_ok()
 }
 
-pub(crate) fn migrate_old_media_tool(old: &Path, new_dir: &Path, want_hex: &str) -> OldToolFate {
+pub(crate) fn migrate_old_media_tool(old: &Path, new_dir: &Path, known_hex: &[&str]) -> OldToolFate {
     if !old.is_file() {
         return OldToolFate::Absent;
     }
     let Some(name) = old.file_name() else { return OldToolFate::Absent };
     let Ok(got) = sha256_file_hex(old) else { return OldToolFate::Kept };
-    if !ct_eq(got.as_bytes(), want_hex.to_ascii_lowercase().as_bytes()) {
+    if !known_hex.iter().any(|want| ct_eq(got.as_bytes(), want.to_ascii_lowercase().as_bytes())) {
         return if set_old_tool_aside(old) { OldToolFate::SetAside } else { OldToolFate::Kept };
     }
     let dest = new_dir.join(name);
@@ -452,8 +457,8 @@ pub(crate) fn migrate_old_media_tools(data_dir: &Path, exe_dir: Option<&Path>, l
     if exe_dir.is_some_and(|e| same(e, data_dir)) || same(local_dir, data_dir) {
         return;
     }
-    for (name, hash) in [("ffmpeg.exe", FFMPEG_EXE_SHA256), ("ffprobe.exe", FFPROBE_EXE_SHA256)] {
-        let fate = migrate_old_media_tool(&data_dir.join(name), local_dir, hash);
+    for (name, known) in [("ffmpeg.exe", &FFMPEG_EXE_KNOWN_SHA256), ("ffprobe.exe", &FFPROBE_EXE_KNOWN_SHA256)] {
+        let fate = migrate_old_media_tool(&data_dir.join(name), local_dir, known);
         if fate != OldToolFate::Absent {
             append_crash_log(&format!("old {name} in the data folder: {fate:?}"));
         }
