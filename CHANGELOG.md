@@ -89,6 +89,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Statistics after a restore.** Restoring a backup made before any copy was counted no longer
+  leaves the 7-day, 30-day and 12-month periods empty although the restored history has copies.
 - **Recording finished during a question.** A recording that finishes while the "discard after
   copy" question is open is no longer closed and partly thrown away when you answer it.
 - **Typed text stays put.** Saving a new prompt from dropped text, a text recognition result, the

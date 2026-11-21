@@ -1248,6 +1248,36 @@ fn restore_selective_data_scope_without_usage_daily_clears_the_live_one_and_its_
     let _ = std::fs::remove_file(&staged);
 }
 
+// A backup with the daily table but no counted copy yet: the restored copy_log must still be
+// counted, so the live marker goes and the next read reseeds from it.
+#[test]
+fn restore_selective_data_scope_with_an_empty_usage_daily_reseeds_from_the_restored_copy_log() {
+    let dir = std::env::temp_dir();
+    let target = dir.join(format!("{}-test-restore-usage3-target.db", brand::SLUG));
+    let staged = dir.join(format!("{}-test-restore-usage3-staged.db", brand::SLUG));
+    let usage = "CREATE TABLE usage_daily(day INTEGER NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(day, id));";
+    {
+        let conn = full_schema_db(&target, "target");
+        conn.execute_batch(usage).unwrap();
+        conn.execute_batch("INSERT INTO usage_daily VALUES(20000, 'live', 5); INSERT INTO meta VALUES('usage_daily_seeded', '1');").unwrap();
+    }
+    {
+        let conn = full_schema_db(&staged, "staged");
+        conn.execute_batch(usage).unwrap();
+        conn.execute_batch("INSERT INTO copy_log VALUES(86400, 'old'); INSERT INTO copy_log VALUES(86500, 'old');").unwrap();
+    }
+    restore_selective(&target, &staged, "data").unwrap();
+    let conn = Connection::open(&target).unwrap();
+    let seeded: i64 = conn.query_row("SELECT COUNT(*) FROM meta WHERE key='usage_daily_seeded'", [], |r| r.get(0)).unwrap();
+    assert_eq!(seeded, 0, "an empty restored daily table must not keep the live marker");
+    db_seed_usage_daily_once(&conn, 0).unwrap();
+    let (day, id, n): (i64, String, i64) = conn.query_row("SELECT day, id, n FROM usage_daily", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+    assert_eq!((day, id.as_str(), n), (1, "old", 2));
+    drop(conn);
+    let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&staged);
+}
+
 // A backup that has the table replaces the live rows with its own and leaves the marker alone.
 #[test]
 fn restore_selective_data_scope_with_usage_daily_replaces_the_rows_and_keeps_the_marker() {

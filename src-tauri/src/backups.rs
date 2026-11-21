@@ -1003,6 +1003,12 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
                     &format!("INSERT INTO {table}({cols}) SELECT {cols} FROM backup.{table}"),
                     [],
                 )?;
+                // A backup taken before any copy was counted brings an empty daily table. The live
+                // seeded marker would then keep the restored copy_log from ever being counted, so it
+                // goes and the next read reseeds (an empty copy_log just sets the marker again).
+                if table == "usage_daily" && tx.query_row("SELECT NOT EXISTS(SELECT 1 FROM usage_daily)", [], |r| r.get::<_, bool>(0))? {
+                    tx.execute("DELETE FROM meta WHERE key = 'usage_daily_seeded'", [])?;
+                }
             }
             // The vault keys follow the prompts: confidential prompts are sealed with the key derived
             // from the salt of the settings they came with.
