@@ -97,4 +97,20 @@ def run(browser, tmp):
     await until(() => !viewOpen(), 60);
     if (viewOpen()) errs.push('bmv04: deleting the last file left the view open');
     """)
+    # Opening a recording, and stepping to another one, starts playback.
+    failed += ar_probe('bmv05', 'manager: a recording starts playing when opened and when stepped to', 'manager', '880x600', '', BOOT + r"""
+    let plays = 0;
+    HTMLMediaElement.prototype.play = function () { plays++; return Promise.resolve(); };
+    await kindReady('recordings');
+    const mp4s = [...tiles()].filter((t) => t.dataset.name.endsWith('.mp4'));
+    mp4s[0].click();
+    await until(() => document.querySelector('#mm-view-stage video'), 40);
+    if (plays < 1) errs.push('bmv05: opening an mp4 did not call play()');
+    const before = plays;
+    document.getElementById('mm-view-next').click();
+    await sleep(150);
+    const nextName = document.getElementById('mm-view-name').textContent;
+    if (!nextName.endsWith('.mp4')) errs.push('bmv05: the next file is ' + nextName + ', not a second mp4');
+    if (plays < before + 1) errs.push('bmv05: stepping to a second mp4 did not call play()');
+    """)
     return failed

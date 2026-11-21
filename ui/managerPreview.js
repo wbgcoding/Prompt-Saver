@@ -90,6 +90,15 @@ export function createPreview(ctx) {
       v.addEventListener("error", () => { if (mine === seq && v.getAttribute("src")) message(t("mmNoInlinePlay"), f, true); });
       v.src = src;
       stage.appendChild(v);
+      // Start right away; if the webview refuses sound-on autoplay, retry once muted (the controls let the user unmute).
+      const started = v.play();
+      if (started && started.catch) {
+        started.catch(() => {
+          if (mine !== seq || !v.getAttribute("src")) return;
+          v.muted = true;
+          v.play().catch(() => {});
+        });
+      }
     } else if (IMG_TAG_EXTS.has(f.ext)) {
       const img = document.createElement("img");
       img.alt = f.name;
