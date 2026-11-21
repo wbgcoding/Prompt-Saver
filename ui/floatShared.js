@@ -308,8 +308,10 @@ export function makeEtaEstimator() {
 // thresholds in both places.
 export function fmtBytes(n, lang = "en") {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${fmtNum(n / 1024, 1, lang)} KB`;
-  return `${fmtNum(n / 1024 / 1024, 1, lang)} MB`;
+  if (n < 1000 * 1024) return `${fmtNum(n / 1024, 1, lang)} KB`;
+  // The next unit starts at 1000 of the smaller one, so a size never needs a thousands separator.
+  if (n < 1000 * 1024 * 1024) return `${fmtNum(n / 1024 / 1024, 1, lang)} MB`;
+  return `${fmtNum(n / 1024 / 1024 / 1024, 2, lang)} GB`;
 }
 
 // A number with a fixed count of decimals the way the UI language writes it (decimal comma in

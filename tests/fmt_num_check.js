@@ -21,8 +21,12 @@ async function main() {
   expect("fmtBytes 600000000 en", fmtBytes(600000000, "en"), "572.2 MB");
   expect("fmtBytes without a language is English", fmtBytes(600000000), "572.2 MB");
   expect("fmtBytes bytes tier", fmtBytes(512, "de"), "512 B");
+  expect("fmtBytes GB tier de", fmtBytes(1214251008, "de"), "1,13 GB");
+  expect("fmtBytes 999 MB stays MB", fmtBytes(999 * 1048576, "en"), "999.0 MB");
+  expect("fmtBytes 1000 MB is GB", fmtBytes(1000 * 1048576, "en"), "0.98 GB");
   expect("fmtBytes KB tier de", fmtBytes(1536, "de"), "1,5 KB");
   expect("fmtBytes KB tier en", fmtBytes(1536, "en"), "1.5 KB");
+  expect("fmtBytes 1000 KB is MB", fmtBytes(1000 * 1024, "en"), "1.0 MB");
   expect("fmtBytes whole MB keeps one decimal", fmtBytes(2 * 1024 * 1024, "de"), "2,0 MB");
   expect("fmtBytes pl", fmtBytes(600000000, "pl"), "572,2 MB");
   expect("fmtBytes ja", fmtBytes(600000000, "ja"), "572.2 MB");
