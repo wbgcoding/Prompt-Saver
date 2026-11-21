@@ -1,0 +1,718 @@
+/* ---- Switch toggles ---- */
+.switch-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.switch-field > span { font-size: 13px; color: var(--fg); min-width: 0; }
+.switch-field > span:first-child { flex: 1; }
+/* A small dot instead of a "(Default off)" text suffix crowding the label.
+   A real shape (not a "." glyph) so it sits geometrically centred on the
+   switch-field row -- a text character's ink sits above its own line box,
+   never truly centred by flex alignment alone. */
+.default-off-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  align-self: center;
+  flex: 0 0 auto;
+}
+/* Settings toggles laid out in two even columns (wider popup). Long labels wrap
+   within their cell instead of being cut off; the switch stays pinned right. */
+.switch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; align-items: center; }
+/* Two columns need ~200px each; below that they stack rather than pushing the
+   switches past the dialog edge, where the body's overflow clip put them out of reach. */
+@media (max-width: 520px) {
+  .switch-grid, .three-col { grid-template-columns: minmax(0, 1fr); }
+}
+/* The settings switches sit in two columns; a dialog narrower than 440px (a viewport under
+   about 470px) stacks them. */
+#settings-main .switch-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px; }
+@media (max-width: 468px) {
+  #settings-main .switch-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.switch-grid .switch-field { align-items: center; }
+.switch-grid .switch-field > span { white-space: normal; line-height: 1.3; }
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--control-border);
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--transition), background var(--transition);
+}
+.switch:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch:checked::after {
+  background: #fff;
+  transform: translateX(18px);
+}
+
+/* Danger button (two-step confirm) */
+.danger-btn:hover { border-color: var(--danger); color: var(--danger); }
+.danger-btn.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+/* A destructive action in a dialog footer that is undone from a toast: red text, no frame. */
+.text-danger-btn {
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.text-danger-btn:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.text-danger-btn:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+/* The dialog's third choice when it throws work away (Discard beside Save). */
+#confirm-alt.alt-danger { color: var(--danger); }
+#confirm-alt.alt-danger:hover { border-color: var(--danger); }
+
+/* ---- Context menu ---- */
+.ctx {
+  position: fixed;
+  z-index: 70;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  animation: pop-in var(--transition);
+}
+/* The tile menu opens over an open folder (a .ctx at 70 too, appended later), so it sits one
+   layer higher or it would show behind the folder it was opened from. */
+#ctx.ctx { z-index: 71; }
+.ctx button {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.ctx button:hover { background: var(--surface-2); }
+/* A menu entry that has nothing to do here (move left at the first tab, move
+   right at the last) stays visible rather than vanishing -- the two entries
+   would otherwise jump around as a tab nears either end. */
+.ctx button:disabled { color: var(--muted); cursor: default; opacity: 0.5; }
+.ctx button:disabled:hover { background: transparent; }
+/* The rotate row has no icon: its 16px check slot stands where the other
+   entries carry theirs, so every label lines up. */
+.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 8px; }
+.ctx button[data-act="rotateAutoMenu"] .tb-check { flex: 0 0 16px; width: 16px; }
+/* Delete is red at rest, set apart by the last separator; the undo toast is the guard. */
+#ctx button.danger { color: var(--danger); }
+.ctx button.danger:hover { color: var(--danger); }
+.ctx-sep { height: 1px; margin: 4px 6px; background: var(--border); flex: 0 0 auto; }
+.ctx-kbd { margin-left: auto; padding-left: 16px; color: var(--muted); font: inherit; font-size: 11px; }
+.ctx button.confirm,
+.ctx button.confirm:hover { background: var(--danger); color: #fff; }
+/* The shared folder glyph on a "group into a folder" / ungroup entry: same
+   16px slot the pill folder's own menu uses for it. */
+.ctx button.has-icon { display: flex; align-items: center; gap: 8px; }
+.ctx button .menu-icon { flex: 0 0 16px; width: 16px; height: 16px; }
+.ctx button .menu-icon svg { width: 100%; height: 100%; display: block; }
+
+/* Right-click toolbar menu (enable/disable the top-bar tools). */
+.toolbar-menu { min-width: 232px; z-index: 90; max-height: min(72vh, 460px); overflow-y: auto; }
+.toolbar-menu-head {
+  padding: 4px 10px 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.toolbar-item { display: flex; align-items: center; gap: 9px; }
+.tb-check { flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
+.tb-icon { flex: 0 0 17px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg); }
+.toolbar-item:not(.on) > span:last-child { color: var(--muted); }
+.toolbar-item:not(.on) .tb-icon { color: var(--muted); }
+
+/* ---- Grid-size picker popup ---- */
+.num-pop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  min-width: 56px;
+  max-height: 240px; /* up to 8 rows at the larger font, scrollbar only when needed */
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+/* Set by placePopover when a popover is taller than the room it has: it keeps its
+   place inside the window and scrolls instead of being cut off at the edge. */
+.pop-clamped { overflow-y: auto; }
+/* The colour picker is a canvas plus a hue bar and a hex row: scrolling it would put
+   the knob out of reach, and letting it spill would cut the hex field off. So it is
+   SIZED to fit: .cp-sv shrinks with the window and the whole popover stays well
+   inside even the app's smallest one. */
+.color-pop.pop-clamped { overflow: visible; max-height: none !important; }
+/* The picker's right-click history: same chrome as the other small popovers. */
+.pick-history-pop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  width: max-content;
+  max-width: 280px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.pick-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.pick-history-row:hover { background: var(--surface-2); }
+.pick-history-swatch {
+  width: var(--pick-swatch, 22px);
+  height: var(--pick-swatch, 22px);
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.pick-history-hex { font-family: monospace; font-size: 12.5px; }
+.pick-history-empty { padding: 6px 10px; color: var(--muted); font-size: 12px; max-width: 220px; }
+.num-pop::-webkit-scrollbar { width: 6px; }
+.num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+.num-pop button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit; /* same size as the select that opened the popup */
+  text-align: center;
+  cursor: pointer;
+}
+.num-pop button:hover { background: var(--surface-2); }
+.num-pop button.sel {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+/* Keyboard highlight in a select popup: the hover tint plus a ring, so it stays
+   visible on the selected (accent) row too. */
+.num-pop button.kb {
+  background: var(--surface-2);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.num-pop button.sel.kb { background: var(--accent); }
+
+/* ---- Toast ---- */
+/* Toast: a compact themed card (icon badge + message), the same visual language as
+   the update notification; never the old flat accent pill. */
+.toast {
+  position: fixed;
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, var(--toast-width, 440px));
+  padding: 10px 15px 10px 11px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition), transform var(--transition);
+  /* Above modals, context menus and popups so an error/feedback toast is always
+     visible, even when fired from inside a modal or confirmation flow. */
+  z-index: 200;
+}
+/* No composer bar: sit near the bottom edge instead of floating over empty grid. */
+body.no-composer .toast { bottom: 18px; }
+/* ToastPos = "top" moves the toast to the header edge instead of the footer. */
+body.toast-top .toast { bottom: auto; top: 66px; transform: translateX(-50%) translateY(-8px); }
+body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.actionable { pointer-events: auto; }
+.toast-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.toast-ico svg { display: block; }
+/* The copy confirmation carries the colour that was just picked, so the value
+   and the colour itself arrive together. The glyph flips to the readable ink. */
+.toast.tinted .toast-ico { background: var(--toast-tint); color: var(--toast-ink); }
+.toast-msg { flex: 1 1 0; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.3; }
+.toast-btn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-btn:hover { filter: brightness(1.08); }
+/* A long message with an action button (class stacked, set in toast()) puts the button on its own line under the message (icon | message in
+   row 1, the button right-aligned in row 2), so a long message gets the full card width
+   instead of the column a one-row layout leaves it. max-content keeps the card as wide as
+   the text wants (capped by max-width), never half the window as the left: 50% offset would
+   give a shrink-to-fit box. The update card keeps its own one-row layout. */
+.toast.stacked:not(.update) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 8px;
+  width: max-content;
+}
+.toast.stacked:not(.update) .toast-ico { grid-column: 1; grid-row: 1; }
+.toast.stacked:not(.update) .toast-msg { grid-column: 2; grid-row: 1; align-self: center; }
+.toast.stacked:not(.update) .toast-btn { grid-column: 2; grid-row: 2; justify-self: end; }
+/* Colour-pick toast: three notations as separate copy-this-format chips, on the
+   SAME line as the message. The card widens for them instead of the row breaking to a
+   second line; only a genuinely too-narrow window still wraps (flex-wrap on the card),
+   and then the whole row moves down together rather than splitting mid-row. */
+.toast.has-chips { flex-wrap: wrap; max-width: min(96vw, 640px); gap: 9px; }
+.toast-chip-row {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin-left: auto;
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+}
+.toast-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.toast-chip:hover { border-color: var(--accent); }
+/* The notation that is already on the clipboard: filled, so the message does not
+   have to spell the value out a second time. */
+.toast-chip.is-current { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.toast-chip.copied { transform: scale(1.08); border-color: var(--accent); color: var(--accent); }
+.toast-chip.is-current.copied { color: var(--accent-fg); }
+
+/* Update notification: a prominent, theme-aware card (icon badge + install
+   button) instead of the flat accent pill; more present, still theme-adapted. */
+.toast.update {
+  align-items: center;
+  gap: 12px;
+  max-width: min(92vw, var(--toast-width, 440px));
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.toast.update .toast-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.toast.update .toast-ico svg { display: block; }
+.toast.update .toast-msg { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.toast.update .toast-btn {
+  flex: 0 0 auto;
+  padding: 8px 15px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+}
+.toast.update .toast-btn:hover { background: var(--accent); filter: brightness(1.08); }
+
+/* ---- Tags: chips in the editor, filter row in the library, manager dialog ---- */
+/* Default-on feature: switched off, the tag UI is gone, the stored tags stay. */
+body.noflag-tags #modal-tags,
+body.noflag-tags .lib-tagbar { display: none; }
+/* Private notes: the editor row only exists while the feature is on. */
+body.noflag-promptNotes #modal-notes { display: none; }
+/* Archive: reserved-tag feature is opt-in, so its chip/menu/batch controls
+   only exist once it is switched on. */
+body:not(.flag-archiveTag) #library-archive,
+body:not(.flag-archiveTag) #lib-batch-archive,
+body:not(.flag-archiveTag) #lib-batch-unarchive,
+body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
+/* A private note reads like a different kind of field, not a second
+   prompt box: every .modal-input (including the prompt text) already uses
+   --surface-2, so the note gets the page's own --surface instead: a quieter,
+   recessed fill that still keeps the same border and shape. */
+.modal-notes-text { resize: vertical; min-height: 38px; font-size: 13px; background: var(--surface); }
+
+.modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+/* Tags/hotkey/history sub-sections inside one "Advanced options" collapsible:
+   a thin rule between them stands in for the collapse headers they lost. */
+.modal-advanced-sub + .modal-advanced-sub { padding-top: 10px; border-top: 1px solid var(--border); }
+.modal-advanced-sub-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+/* Hotkey/history used to be their own .modal-collapse-body (flex column, 4px gap)
+   before they were merged into the Advanced panel; restore that spacing here so their own children
+   (row, inline error, action dropdown, hint) don't touch. Not applied to
+   .modal-tags, which keeps its own single-row wrapping layout. */
+#modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
+.modal-advanced-history-body { display: flex; flex-direction: column; gap: 4px; }
+/* Only the newest three versions show; the button reveals the rest, which then scroll inside
+   the section (the button stays below the list, outside the scroll). */
+.modal-advanced-history-body:not(.hist-all) > .hist-older { display: none; }
+.modal-advanced-history-body.hist-all { max-height: min(50vh, 420px); overflow-y: auto; }
+.modal-advanced-history-body.hist-all > .hist-more { position: sticky; bottom: 0; background: var(--surface); box-shadow: 0 -6px 10px var(--surface); }
+.hist-more { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* Every unassigned tag, offered right in the editor so adding one is one click
+   instead of typing it out; once expanded the box scrolls at about three rows. */
+.tag-quickadd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; width: 100%; }
+.tag-quickadd.expanded { max-height: 102px; overflow-y: auto; align-content: flex-start; }
+.tag-quickadd-more { color: var(--muted); }
+.tag-quickadd-label { color: var(--muted); font-size: 11.5px; }
+.tag-quickadd > .tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
+.tag-quickadd > .tag-chip:hover { border-color: var(--accent); background: var(--surface); }
+.tag-input-wrap { position: relative; display: flex; flex: 1 1 130px; min-width: 90px; }
+.tag-input { flex: 1 1 auto; min-width: 0; padding-right: 28px; }
+/* The handle that makes the type-ahead discoverable: it opens the full tag list. */
+.tag-pick {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tag-pick:hover { color: var(--fg); background: var(--hover); }
+.lib-tagbar-label { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--fg);
+  /* 600 like every other pill in the app (.lib-type, .expert-chip, .toast-chip);
+     at 500 the tag chips were the one washed-out control among them. The taller
+     line-height is what actually centres the label in the pill; 1.3 sat it high. */
+  font-size: var(--tag-chip-px, 12px);
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+.tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+button.tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
+button.tag-chip:hover { border-color: var(--accent); }
+.tag-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+.tag-x {
+  flex: 0 0 auto;
+  padding: 0 0 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.15em;
+  line-height: 1;
+  cursor: pointer;
+}
+.tag-x:hover { color: var(--danger); }
+
+/* The type-ahead list floats above the dialog it belongs to. */
+.tag-suggest {
+  position: fixed;
+  z-index: 140;
+  max-width: min(340px, 92vw);
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+/* The type-ahead is a LIST, like every other dropdown in the app; chips floating in a
+   box read as a stray tooltip. */
+.tag-suggest { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+/* The row is full width so the whole line is clickable, but the HIGHLIGHT belongs to
+   the chip: a 40px tag lighting up a 200px band looked like the wrong thing was
+   selected. */
+.tag-suggest-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tag-suggest-item > .tag-chip { transition: border-color var(--transition), background var(--transition); }
+.tag-suggest-item:hover > .tag-chip,
+.tag-suggest-item.active > .tag-chip { border-color: var(--accent); background: var(--surface); }
+.tag-suggest-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
+.tag-suggest::-webkit-scrollbar { width: 8px; }
+.tag-suggest::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
+.tag-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* The filter row carries the SAME chip metrics as the type filter above it, or the
+   two rows read as two different controls stacked by accident. */
+.lib-tagbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lib-tagbar:empty { display: none; }
+.tag-chip.tag-filter {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.tag-chip.tag-filter:hover { border-color: var(--accent); color: var(--fg); }
+.tag-chip.tag-filter.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* Clearing the filter and opening the manager are ACTIONS, not filters: they must
+   not look like one more tag to click. */
+.tag-action {
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.tag-action:hover { border-color: var(--accent); color: var(--fg); }
+.tag-action:last-child { margin-left: auto; }
+
+#tag-modal.overlay { z-index: 68; }
+.tag-manager-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
+.tag-manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.tag-manage-row:last-child { border-bottom: none; }
+/* The name keeps readable room; on a narrow window the buttons wrap below it instead. */
+.tag-manage-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tag-chip-px, 12px);
+}
+.tag-manage-count { flex: 0 0 auto; min-width: 22px; text-align: right; color: var(--muted); font-size: 12px; }
+.tag-manage-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+
+/* Import preview: a plain scrollable list, duplicates dimmed and badged. */
+.import-preview-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; min-height: 0; }
+.import-preview-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px; border-radius: 6px; }
+.import-preview-row.dup { opacity: 0.55; }
+.import-preview-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.import-preview-badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+/* Restore/delete-forever pair on a discarded-recording row: its own small
+   group so justify-content: space-between on the row spaces name/badge/group
+   apart, not the two buttons apart from each other. */
+.import-preview-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.import-preview-actions .ghost-btn { padding: 3px 8px; font-size: 12px; }
+
+/* Keyboard shortcuts overview: one row per action, same list shape as the
+   import preview above. */
+.shortcuts-list { display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto; min-height: 0; }
+.shortcuts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }
+.shortcuts-list .shortcuts-section-title { margin: 12px 6px 2px; }
+.shortcuts-list .shortcuts-section-title:first-child { margin-top: 2px; }
+.shortcuts-row-desc { flex: 1; min-width: 0; font-size: 13px; }
+.shortcuts-row-keys { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-family: monospace; }
+/* Select all/none above a checkbox-per-row preview (the folder import). */
+.import-preview-list-head { display: flex; gap: 8px; margin-bottom: 4px; }
+/* Batch export dialog's chosen-destination line; video.css has its own copy
+   for the video editor since that stylesheet never loads on the main window. */
+.ve-muted { color: var(--muted); }
+
+/* ---- Custom themes ---- */
+
+#theme-modal.overlay { z-index: 68; }
+/* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any
+   window height (a shrinking flex child would otherwise spill over them). */
+#theme-modal .modal { width: min(680px, 94vw); overflow: hidden; }
+.theme-edit-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+#theme-modal .modal-actions {
+  flex: 0 0 auto;
+  /* Marks where the scrolling list ends. Without it the half-visible last row looked
+     cut off by the buttons rather than scrollable. */
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.theme-edit-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  /* Stretch the scroll container out over the dialog's 20px padding so its bar sits
+     on the window edge, then put the padding back inside so the rows stay inset. */
+  margin-right: -20px;
+  padding-right: 20px;
+}
+.theme-edit-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.theme-edit-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+/* Two columns of colour rows on a wide window, falling back to one column on a
+   narrow one (auto-fit, same rule as .expert-cols; never forced from CSS). */
+.theme-var-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 16px; align-items: start; }
+.theme-var-group {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.theme-var-row { display: flex; align-items: center; gap: 8px; }
+.theme-var-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+/* Overridden tokens are marked so it stays clear what the theme actually changes. */
+.theme-var-row.overridden .theme-var-name { color: var(--accent); }
+.theme-swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.theme-hex {
+  flex: 0 0 86px;
+  padding: 4px 6px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+.theme-hex.invalid { border-color: var(--danger); }
+/* A typed value outside its allowed range (the port field, so far). */
+.expert-num.invalid { border-color: var(--danger); }
+.expert-row-hint-danger { color: var(--danger); }
+.theme-var-reset { flex: 0 0 auto; padding: 4px; }
+.theme-var-reset svg { width: 13px; height: 13px; }
+.theme-var-reset:disabled { opacity: 0; pointer-events: none; }
+.modal-actions #theme-edit-delete { margin-right: auto; }
+/* Separator row in the dropdown popup (built-in themes above, custom below). */
+.num-pop button.sep {
+  padding: 3px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: default;
+}
+.num-pop button.sep:hover { background: transparent; }
+
+.hidden { display: none !important; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Screen-reader-only text: present for assistive tech, invisible on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

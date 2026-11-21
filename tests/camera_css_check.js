@@ -105,7 +105,7 @@ function tokenMap(rules) {
 }
 
 function check() {
-  const main = fs.readFileSync(path.join(STYLES, "main.css"), "utf8");
+  const main = require("./ui_sources.js").mainCss();
   const cam = fs.readFileSync(path.join(STYLES, "camera.css"), "utf8");
   const problems = [];
   const mainRules = parseRules(main);

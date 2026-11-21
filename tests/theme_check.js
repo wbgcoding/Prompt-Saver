@@ -235,7 +235,7 @@ async function main() {
   check("the groups hold every token exactly once", [...grouped].sort(), [...api.THEME_VARS].sort());
 
   // ---- the stylesheet
-  const css = fs.readFileSync(path.join(uiDir, "styles", "main.css"), "utf8").replace(/\r\n/g, "\n");
+  const css = require("./ui_sources.js").mainCss().replace(/\r\n/g, "\n");
   const blockOf = (selector) => {
     const i = css.indexOf("\n" + selector + " {");
     if (i < 0 && !css.startsWith(selector + " {")) return null;

@@ -1,0 +1,1182 @@
+/* ---- Color swatches (prompt color picker) ---- */
+/* Up to 10 columns (bounded by max-width); wraps to fewer on narrow dialogs and
+   small windows instead of overflowing/clipping the rightmost swatches. */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 26px);
+  justify-content: center;
+  gap: 8px;
+  max-width: 332px;
+  margin-inline: auto;
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition), border-color var(--transition);
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.sel { border-color: var(--fg); transform: scale(1.12); }
+.swatch.none { background: var(--surface-2); position: relative; }
+.swatch.none::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, transparent 45%, var(--danger) 45%, var(--danger) 55%, transparent 55%);
+}
+/* The editor's short colour row: one line (none, custom, colours in use, More). */
+.swatches.swatches-compact { display: flex; flex-wrap: wrap; max-width: none; }
+.swatch.more {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Free color picker: rainbow wheel until a custom color is chosen. */
+.swatch.custom:not([style*="background"]) {
+  background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444);
+}
+/* View color: label + palette in the view dialog. */
+.view-color-field { display: flex; flex-direction: column; gap: 6px; }
+.view-color-field > span { color: var(--muted); font-size: 12px; }
+/* View grid picker (columns × rows) in the view dialog. */
+.view-color-field > .view-grid { align-self: flex-start; }
+/* ---- Custom color picker popup ---- */
+.color-pop {
+  position: fixed;
+  z-index: 140;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 216px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.cp-sv {
+  position: relative;
+  height: min(130px, 22vh);
+  min-height: 56px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+.cp-knob {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.cp-hue {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  margin: 0;
+  border-radius: 5px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+}
+.cp-hue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cp-preview {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+.cp-hex {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+.cp-hex:focus { border-color: var(--accent); }
+
+/* Tinted tiles: colored background, white text. The ⋯ menu keeps the themed look
+   (surface + accent) on every tile; independent of the tile's colour or type. */
+.tile.tinted { color: #fff; }
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--fg);
+  /* background-color, not the background shorthand: the shorthand resets
+     background-image to none, which clobbers a select's --select-chevron
+     (class beats the plain `select` tag selector on specificity). */
+  background-color: var(--surface-2);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.modal-input:focus { border-color: var(--accent); }
+/* The padding shorthand above resets padding-right to 12px, which reclaims the
+   room the global `select` rule reserves for its chevron -- so a <select
+   class="modal-input"> drew its arrow on top of the text. Restore it here,
+   at higher specificity than either single-class/type rule so it always wins. */
+select.modal-input { padding-right: 30px; }
+/* Type metrics matched to .md-preview: the two are one field that swaps. */
+.modal-text { resize: vertical; min-height: 110px; max-height: 280px; font-size: 13px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions #modal-delete { margin-right: auto; }
+/* Five buttons is one more than the row comfortably fits at the app's
+   narrowest supported width -- Discard peels off to the left like the other
+   destructive/secondary actions above, and the row wraps rather than
+   overflowing if it still does not fit. */
+#rec-modal .modal-actions { flex-wrap: wrap; }
+#rec-modal-discard { margin-right: auto; }
+
+/* The recording result window's folder line, above the action row. */
+.rec-modal-folder-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.rec-modal-folder-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
+
+/* Image preview inside the save/edit modal */
+.modal-img-wrap { display: flex; flex-direction: column; gap: 8px; }
+/* Media stage shrinks to the image so the caption sits only over the picture
+   (as on a real tile), not across the whole dialog width. NOTE: no
+   container-type here: size containment collapses the auto-width stage to 0,
+   which hid the preview image entirely. */
+.modal-media-stage {
+  position: relative;
+  align-self: center;
+  width: fit-content;
+  max-width: 100%;
+}
+/* Live caption preview mirrors the on-tile look; only its size rules differ. */
+.modal-caption-preview { font-size: 11px; }
+.modal-preview-img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+/* Four buttons in a row: they wrap onto a second line rather than being pushed
+   past the dialog edge on a narrow window. */
+.modal-display-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Attached file row inside the save/edit modal */
+.modal-file-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.modal-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+/* Page number field, only shown for a PDF attachment. */
+.pdf-page-input { flex: 0 0 auto; width: 52px; padding: 3px 6px; font-size: 12px; text-align: center; }
+
+/* Plain-text preview for a txt/md/json/csv attachment. Fixed-width font,
+   scrolls instead of growing the dialog past a comfortable height. */
+.modal-text-attach-preview {
+  margin-top: 4px;
+}
+.modal-text-attach-content {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-text-attach-preview .modal-hint { margin-top: 4px; }
+/* Caption text + its size select side by side. */
+.caption-row {
+  display: flex;
+  gap: 8px;
+}
+.caption-row .modal-input { flex: 1; min-width: 0; }
+/* The select sizes itself to its widest option ("Like settings" etc. in any
+   language) instead of clipping at a fixed width. */
+.caption-row .caption-size { flex: 0 0 auto; width: auto; max-width: 55%; }
+
+.modal-hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* The raw ffmpeg text behind a translated error message: closed by default,
+   a person chasing a real bug opens it, everyone else never sees it. */
+.ffmpeg-error-details {
+  margin: -2px 0 0;
+}
+.ffmpeg-error-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ffmpeg-error-details pre {
+  margin: 6px 0;
+  padding: 8px;
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: 11px ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Live length readout: dimmed text at the left of the row under the editor textarea. */
+.modal-length {
+  margin: 0 2px;
+  text-align: left;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  user-select: none;
+}
+/* Expert-menu action buttons (open Statistics / Backups / Duplicates). */
+.expert-action { width: 100%; margin-top: 4px; }
+/* The reset button keeps the neutral-until-armed look of .danger-btn. */
+.expert-action-block { display: flex; flex-direction: column; gap: 4px; }
+.expert-action-block > .hint { margin: 0; }
+/* A sub-row's own left margin (.expert-sub, depth-based indent) shrinks a
+   width:100% action button's box by the same amount -- otherwise its right
+   edge overflows the panel by exactly that margin (the hotkey-set buttons are
+   the first with a label long enough at depth 2 to show it). */
+.expert-action.expert-sub { width: calc(100% - var(--expert-depth, 1) * 18px); }
+
+/* Clear-X inside text / number fields + textareas. The wrapper is block by default
+   (safe inside the column-flex modals, never grows vertically); flex rows opt in. */
+.clear-wrap { position: relative; display: block; min-width: 0; }
+.clear-wrap.clear-wrap-ta { display: flex; }
+.clear-wrap > input, .clear-wrap > textarea { width: 100%; }
+.clear-wrap > input { padding-right: 34px; }
+.clear-wrap > textarea { padding-right: 32px; }
+/* A wrapped field is sized by its wrapper. Row rules that size `.modal-input`
+   directly would otherwise leave the input short of the wrapper edge, and the X,
+   positioned against the wrapper, ends up floating beside the field. */
+.clear-wrap > input.modal-input { width: 100%; min-width: 0; }
+/* Wrapped number fields drop the native spinners: the X takes their place. */
+.clear-wrap > input[type=number]::-webkit-inner-spin-button,
+.clear-wrap > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* wireClear() moves every text input into a .clear-wrap span at runtime, so the
+   WRAPPER becomes the flex item and any flex sizing meant for the input has to sit
+   here; otherwise the wrapper shrinks to nothing and the field collapses. */
+.library-search .clear-wrap, #journal-search .clear-wrap, .caption-row .clear-wrap, .hotkey-row .clear-wrap { flex: 1 1 auto; }
+.vars-new > .clear-wrap { flex: 1 1 auto; min-width: 0; }
+/* Same field width as the statistics top-N field, so the two number fields of the
+   dialog do not read as two different controls. */
+.backup-set-row .clear-wrap { flex: 0 1 90px; width: auto; }
+/* Composer + editor textareas keep their flex-grow role through the wrapper. */
+.composer .clear-wrap-ta { flex: 1 1 auto; }
+/* The wrapper is the real flex item, so its floor MUST match the textarea's. With
+   min-height:0 (copied from the row wrappers, where a zero floor is correct because
+   their main axis is horizontal) the dialog could squeeze the wrapper to nothing
+   while the field inside kept its 120px; the textarea then spilled out of its own
+   box and was drawn over the colour row, which is what expanding the variable helper
+   made obvious. */
+#modal.tall #modal-text-wrap .clear-wrap-ta { flex: 1 1 auto; min-height: var(--ta-fit, 120px); }
+#modal.tall #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: var(--ta-fit, 120px); max-height: none; }
+.clear-btn {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; padding: 0; display: grid; place-items: center;
+  border: none; border-radius: 6px; background: transparent; color: var(--muted);
+  opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+/* A button keeps the browser's 6px side padding, which leaves a 12px content box for
+   the 16px glyph and pushes it right of the middle of the highlighted square. */
+.clear-btn svg { display: block; }
+/* A text box X sits on the first line: centred on a one-line box (1px border + 10px
+   padding + half the 19px line = 20.5px, minus half the 24px button). */
+.clear-wrap-ta .clear-btn { top: 8.5px; transform: none; }
+/* The composer text box carries the icon zoom; its X follows it, or a raised icon
+   scale leaves the X small and above the middle of the taller box. */
+.composer .clear-wrap-ta > .clear-btn { zoom: var(--icon-zoom, 1); }
+.clear-btn.show { opacity: 0.55; pointer-events: auto; }
+.clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
+/* A hotkey field has a placeholder, so the X shows exactly while a shortcut is set,
+   also when the value is filled in from code. */
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn { opacity: 0.55; pointer-events: auto; }
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
+
+/* Shared mouse-only number stepper (numberField() in floatShared.js):
+   minus/input/plus, plus a presets popover when the field has one. Narrow
+   enough to sit inside the 240px expert/overlay column at raised UI scale
+   without wrapping. */
+/* The input is first in the DOM (see numberField() in floatShared.js: a
+   <label> wrapping this control must forward a click to the input, not to
+   whichever button happens to sit first) but visually sits between the two
+   step buttons, so `order` puts it back there. */
+.numfield { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.numfield input[type="number"] {
+  order: 2;
+  width: 56px;
+  min-width: 0;
+  padding: 4px 6px;
+  text-align: center;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+}
+.numfield input[type="number"]:focus { border-color: var(--accent); outline: none; }
+.numfield-dec { order: 1; }
+.numfield-inc { order: 3; }
+.numfield-list { order: 4; }
+.numfield-dec, .numfield-inc, .numfield-list {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.numfield-dec:hover, .numfield-inc:hover, .numfield-list:hover { border-color: var(--accent); }
+.numfield-dec:disabled, .numfield-inc:disabled { opacity: 0.35; cursor: default; border-color: var(--border); }
+.numfield-pop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.numfield-pop button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.numfield-pop button:hover { background: var(--surface-2); }
+.numfield-pop button.sel { background: var(--accent); color: var(--accent-fg); }
+
+/* Collapsible version history (shared collapse styling). */
+.modal-collapse { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.modal-collapse-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  border: none; background: var(--surface-2);
+  color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.modal-collapse-head:hover { color: var(--accent); }
+.collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
+.modal-collapse.open .collapse-chevron { transform: rotate(180deg); }
+/* Height follows the content: only the CAP is fixed, so a short list leaves no
+   empty band under it. The viewport fraction keeps a long list from pushing the
+   Save row away, and the 120px floor stops the cap from collapsing to a sliver on
+   a very short window (the dialog scrolls there instead). */
+.modal-collapse-body { max-height: min(240px, max(120px, 34vh)); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+/* The editor's Advanced panel grows with its content and only the dialog body scrolls:
+   an inner scroller beside the dialog's own gave two scrollbars and a wheel that
+   scrolled the inner one first. */
+#modal-advanced-body { max-height: none; overflow-y: visible; }
+/* The collapsed hotkey row still shows the bound combination, so the binding
+   is readable without opening the row. */
+.modal-collapse-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.modal-collapse-badge {
+  padding: 1px 7px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+}
+/* Inline capture error: the same dimmed hint slot, in the danger colour. */
+.modal-hotkey-err { color: var(--danger); }
+.hist-row {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 8px; border-radius: 6px; background: var(--surface);
+}
+/* Wraps so long translations of the two restore buttons move to a second line
+   instead of being cut off by the collapsible section. */
+.hist-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.hist-time { font-size: 11px; color: var(--muted); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.hist-preview { font-size: 12px; color: var(--fg); flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.hist-expand {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.hist-expand:hover { color: var(--fg); background: var(--surface-2); }
+.hist-expand svg { transition: transform var(--transition); }
+.hist-row.open .hist-expand svg { transform: rotate(180deg); }
+.hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+.hist-restore { margin-inline-start: auto; }
+/* Chip beside the preview when a snapshot carries rotation entries, so the row
+   itself hints there is more than one text before the user even expands it. */
+.hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
+.hist-full { margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+/* One bordered block per rotation entry (numbered); only rendered at all when
+   a snapshot or its comparison side has more than one entry, so a plain text prompt
+   keeps today's borderless single block. */
+.hist-entry-block { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.hist-entry-block:last-child { border-bottom: none; }
+.hist-entry-num { flex: 0 0 auto; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.hist-name-change { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.hist-name-label { color: var(--muted); }
+/* Word-diff against whatever this version turned into next: no themed
+   "success" colour exists yet, so added text gets a fixed, theme-independent
+   green rather than inventing a 16-theme variable for one spot. */
+.diff-add { background: rgba(34, 197, 94, 0.22); border-radius: 3px; }
+.diff-del { background: color-mix(in srgb, var(--danger) 22%, transparent); text-decoration: line-through; text-decoration-color: var(--danger); border-radius: 3px; }
+
+/* Inline expert panels (backups + statistics): lay their sub-widgets out in a
+   column; the expert menu's own scroll box handles overflow (no nested scroller). */
+.expert-custom { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.expert-custom .switch-field { padding: 3px 0; }
+.expert-custom .stat-section { margin-top: 6px; }
+.expert-custom .stat-cards { margin-top: 2px; }
+
+/* Usage statistics dashboard. */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+/* Fixed column counts so the grids come out as full rows (backup overview 4, the
+   statistics figures 2x4) instead of a ragged last row. Narrow windows fall back to the
+   auto-fit above. */
+@media (min-width: 640px) {
+  #backup-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #stats-panel .stat-cards { grid-template-columns: repeat(var(--stat-cols, 4), minmax(0, 1fr)); }
+}
+.stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
+.stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stat-card-label-first .stat-label { margin: 0 0 4px; }
+/* margin-bottom, not just the heading's own padding-bottom, so the first row of
+   every section sits off the underline by the same amount instead of touching it. */
+.stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; }
+.stat-bars { display: flex; flex-direction: column; gap: 6px; }
+.stat-daily-chart { display: grid; grid-template-columns: repeat(var(--stat-chart-cols, 14), minmax(0, 1fr)); gap: 4px; margin-bottom: 4px; }
+/* 52 weeks or many months: tighter gap, thin bars, the date label may spill over its column. */
+.stat-daily-chart.dense { gap: 1px; }
+.stat-daily-chart.dense .stat-daily-bar { width: min(100%, 8px); border-radius: 2px 2px 0 0; }
+.stat-daily-chart.dense .stat-daily-day { white-space: nowrap; }
+.stat-daily-col { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.stat-daily-val { font-size: 10px; line-height: 12px; height: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-daily-slot { width: 100%; height: 74px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
+.stat-daily-bar { width: min(100%, 22px); border-radius: 4px 4px 0 0; background: var(--accent); opacity: 0.75; }
+.stat-daily-bar.zero { height: 2px; opacity: 1; background: var(--border); border-radius: 1px; }
+.stat-daily-col:hover .stat-daily-bar:not(.zero), .stat-daily-col.today .stat-daily-bar:not(.zero) { opacity: 1; }
+.stat-daily-day { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat-daily-col.today .stat-daily-day { color: var(--fg); font-weight: 700; }
+.stat-bar-row { display: flex; align-items: center; gap: 8px; }
+.stat-bar-name { flex: 0 0 34%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.stat-bar-track { flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); }
+.stat-bar-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+.stat-cleanup { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat-cleanup-item {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 14px;
+  background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stat-cleanup-item:hover { border-color: var(--accent); color: var(--fg); }
+
+/* Duplicate finder. */
+.dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
+/* Backups dialog: wider than a plain popup; it holds the backup settings, the
+   diagnostics cards and the restore list, and it scrolls inside its body so the
+   title row and the close X stay put. Above the settings overlay it was opened
+   from, like the other feature dialogs. The usage statistics dialog is built the
+   same way. */
+#backup-modal.overlay, #stats-modal.overlay { z-index: 65; }
+#backup-modal .modal { width: min(700px, 94vw); overflow: hidden; }
+#stats-modal .modal { width: min(640px, 94vw); overflow: hidden; }
+/* The scroller reaches the modal's right + bottom edge (negative margin, inset
+   re-added as padding) so the scrollbar hugs the far edge instead of floating in
+   a band of surface: same trick as the settings/expert lists. */
+.backup-body,
+.stats-body {
+  max-height: 74vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  margin: 0 -20px -20px 0;
+  padding: 0 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.backup-body::-webkit-scrollbar,
+.stats-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.backup-body::-webkit-scrollbar-thumb,
+.stats-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.backup-body::-webkit-scrollbar-thumb:hover,
+.stats-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.backup-body::-webkit-scrollbar-track,
+.stats-body::-webkit-scrollbar-track { background: transparent; }
+/* One rhythm for both panels: a section head always sits the same distance above
+   its content, and the cards below it line up with the rows above. */
+.backup-body .expert-custom,
+.stats-body .expert-custom { gap: 10px; margin-top: 0; }
+.backup-body .stat-section,
+.stats-body .stat-section { margin-top: 2px; }
+.backup-body .expert-custom > .stat-section:first-child { margin-top: 0; }
+.backup-body .stat-cards,
+.stats-body .stat-cards { margin-top: 0; }
+/* The statistics panel stacks its blocks (switch row, export row, cards, lists)
+   with one gap; its own stat-cards margin would only add to it. The storage
+   and retention panels share the stats-panel-body class and stay as they are. */
+#stats-panel > .stats-panel-body { display: flex; flex-direction: column; gap: 12px; }
+#stats-panel .stat-cards { margin-top: 0; }
+#stats-panel > .stats-panel-body > .stat-section { margin-top: 2px; }
+/* Divider between the sections of the backups window (backups, storage,
+   retention). Backups come first and need none; storage and retention carry
+   their divider on their own collapsible head. */
+.backup-split { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); border-bottom: none; }
+.dup-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); }
+.dup-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.dup-score { font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 10px; }
+.dup-names { font-size: 13px; color: var(--fg); margin-bottom: 8px; }
+.dup-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.dup-col { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.dup-name { font-size: 13px; font-weight: 600; color: var(--fg); }
+.dup-meta { font-size: 11px; color: var(--muted); }
+/* flow-root, not the plain block a div defaults to: a diff-highlighted line packs
+   several inline spans with no gap between them, and a block box's own layout
+   scan treats any two element children of a block as stacked rows -- flow-root
+   keeps the same visual flow while reading as its own kind of box instead. */
+.dup-text { display: flow-root; font-size: 12px; color: var(--fg); white-space: pre-wrap; max-height: 120px; overflow-y: auto; opacity: 0.85; }
+.dup-keep { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
+.dup-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* The free compare view reuses .dup-cols/.dup-col/.dup-actions above (same
+   layout, same word-diff engine) and only adds its own head/image bits. */
+.compare-cols { padding: 12px; }
+.compare-col-head { display: flex; align-items: center; gap: 6px; }
+.compare-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
+.compare-image { max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 6px; }
+.compare-actions { gap: 8px; }
+/* Each column's own keep button sits at the column's foot, so buttons in
+   columns of different text length still line up. */
+.compare-col .dup-keep { margin-top: auto; }
+/* Same flow-root reasoning as .dup-text above, one level down: each rotation
+   entry is its own block (stacked on purpose), but a block's OWN diff spans
+   must not be read as further stacked rows by the layout scan either. */
+.compare-entry { display: flow-root; }
+
+/* Backups & restore. */
+/* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
+/* Diagnostics cards: the date is the value of the card, so it reads as large as any
+   other number, and none of these texts may wrap; a broken date is unreadable. */
+.stat-dt { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.stat-dt .dt-date { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.stat-dt .dt-time { font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-card .stat-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.backup-settings { display: flex; flex-direction: column; gap: 8px; }
+.backup-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* The base `.field { flex-direction: column }` sits later in the file at equal
+   specificity, so a plain `.backup-set-row` would still stack label-over-input.
+   This higher-specificity rule keeps the label to the LEFT of the field.
+   (The GFS tier rule below re-sets column for its narrow inputs; it wins by order.) */
+.field.backup-set-row { flex-direction: row; }
+.backup-set-row > span { font-size: 13px; }
+.backup-set-row .modal-input { flex: 0 0 auto; width: auto; min-width: 90px; }
+/* Pairs a row's optional reset icon with its control so `.backup-set-row`'s
+   space-between still sees exactly two children (label, this wrapper) -- same
+   reason .value-head-right exists for the main expert menu's rows. */
+.backup-set-row .numrow-right { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex: 1 1 auto; min-width: 0; }
+/* Every control in the backup settings shares ONE height, so switching smart
+   retention on cannot make the block below it shift up or down. The height is set
+   explicitly rather than left to each control's own padding: a select and a number
+   input do not agree on their intrinsic height. A touch roomier than the old rows. */
+.backup-settings .modal-input,
+.backup-settings .backup-interval { height: 40px; padding-top: 0; padding-bottom: 0; }
+/* The interval dropdown is at least as wide as the number fields of the column (90px, see
+   .backup-set-row .clear-wrap) and grows to its longest option, so a written-out unit never clips. */
+.backup-interval-row .backup-interval { min-width: 90px; width: auto; }
+/* Category cards: overview on top, schedule and "how many to keep" side by side, the
+   password across both columns. */
+.backup-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.backup-card-title { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: var(--fg); }
+.backup-card-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.backup-card-grid > .backup-pw-card { grid-column: 1 / -1; }
+@media (max-width: 720px) { .backup-card-grid { grid-template-columns: minmax(0, 1fr); } }
+.backup-overview .stat-card { background: var(--surface); }
+/* The four actions share one row, equal widths; a narrow window wraps them two by two. */
+.backup-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.backup-actions > button { min-width: 0; white-space: normal; }
+@media (max-width: 720px) { .backup-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The figures the overview leaves out, as one quiet wrapping line above the list. */
+.backup-details { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 2px 2px 6px; font-size: 12px; }
+.backup-detail { display: inline-flex; gap: 6px; white-space: nowrap; }
+.backup-detail-key { color: var(--muted); }
+.backup-detail-val { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
+/* The slot takes its height from the tier grid itself, which is always rendered and
+   only parked when smart retention is off: that is what stops picking a preset tile
+   from resizing anything below it, at any font size, UI scale or translation.
+   `visibility: hidden` also keeps the parked fields out of the tab order. */
+.backup-tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.backup-tier-grid.is-parked { visibility: hidden; }
+.backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
+.backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
+.backup-tier-grid .clear-wrap { flex: 0 0 auto; width: 64px; }
+/* The plain backup-count field greys out while smart retention (GFS) is on:
+   the backend ignores it, but the stored value survives untouched underneath. */
+.backup-keep-row.is-disabled { opacity: 0.45; }
+/* Optional backup password: label left, field + eye button right. */
+.field.backup-pw-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.backup-pw-row > span { font-size: 13px; }
+/* The card title names the password, so the row holds only field, Save and Remove. */
+.backup-pw-card .field.backup-pw-row { justify-content: flex-start; }
+.backup-pw-controls { display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; gap: 8px; min-width: 0; }
+/* The consequence-of-forgetting warning, a touch smaller under the field. */
+.backup-pw-card > .backup-pw-hint { margin: 0; font-size: 11.5px; }
+.backup-pw-wrap { position: relative; flex: 1 1 200px; min-width: 0; max-width: 320px; display: flex; align-items: center; }
+.backup-pw-wrap .modal-input { padding-right: 36px; }
+.backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
+/* Saving the backup password is an explicit click, never a side effect of leaving
+   the field, so the button sits right next to it, with "remove" beside it. */
+.backup-pw-save, .backup-pw-remove { flex: 0 0 auto; }
+/* WebView2 draws its OWN reveal button inside password fields, which showed up as
+   a second eye next to the themed one. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear { display: none; }
+
+/* Confirm dialog: optional icon above the title and an optional input row. */
+.confirm-head { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.confirm-icon { color: var(--accent); display: grid; place-items: center; }
+.confirm-icon svg { width: 34px; height: 34px; }
+.confirm-head .modal-title { text-align: center; }
+/* The body keeps the line breaks the translation puts in. */
+.confirm-msg { white-space: pre-line; }
+.confirm-input-row { position: relative; display: flex; align-items: center; }
+.confirm-input-row .modal-input { flex: 1 1 auto; padding-right: 36px; }
+.confirm-checkbox-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.confirm-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
+/* Compact export row: the format select and the button share one small height. */
+.stats-export-row { align-items: center; }
+#stats-panel .stats-export-row .ghost-btn { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+.stats-export-row .batch-view-select { padding: 4px 28px 4px 10px; font-size: 12px; }
+/* Period pills above the export row; they wrap on a narrow window. */
+.stats-period-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stats-period-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.stats-period-row .expert-chip { font-family: inherit; padding: 4px 11px; }
+.stats-period-since, .stats-tools-note { margin: 0; color: var(--muted); font-size: 12px; }
+/* Statistics off: the hint and its jump button, left aligned. */
+#stats-panel > .stats-panel-body > #stats-off-open { align-self: flex-start; }
+/* "Most used" heading with the list length choice at its right end. */
+.stats-top-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stats-top-head > .stat-section { flex: 1 1 auto; min-width: 0; }
+
+/* Storage section ("Speicher"): total + measured-at on the left, the
+   re-measure button on the right, then one row per storage kind below. */
+.storage-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.storage-total-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.storage-total { font-weight: 600; }
+.storage-measured { font-size: 11px; color: var(--muted); }
+.storage-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.storage-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 2px; }
+.storage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-size { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
+.storage-open-btn { flex: 0 0 auto; }
+.backup-list-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  padding: 0 0 4px; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px; font-weight: 700;
+}
+.backup-list-head .collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
+.backup-list-head.open .collapse-chevron { transform: rotate(180deg); }
+.backups-list { display: flex; flex-direction: column; gap: 6px; }
+.backup-row { display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.backup-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.backup-size { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* How many prompts are in that snapshot: its own column, right of the date. */
+.backup-count { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+/* The count doubles as a click-to-expand toggle when names are available. */
+.backup-count-toggle { cursor: pointer; }
+.backup-count-toggle:hover, .backup-count-toggle:focus-visible { color: var(--fg); }
+/* One real row per prompt (name / type / char count) instead of one long
+   comma string -- scrolls once it grows past a handful of rows. */
+.backup-names-list {
+  list-style: none; margin: -6px 0 0; padding: 4px 10px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+  max-height: 240px; overflow-y: auto;
+}
+.backup-name-row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 0;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.backup-name-row:last-child { border-bottom: none; }
+.backup-name-row-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--fg);
+}
+.backup-name-row-kind {
+  flex: 0 0 auto; color: var(--muted); font-size: 11px;
+  padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px;
+}
+.backup-name-row-chars {
+  flex: 0 0 auto; min-width: 48px; text-align: right; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* The full content viewer opened per backup row: header counts (reuses
+   .stat-cards), a search + restore toolbar, then a sortable detail table. */
+.backup-content {
+  margin: -6px 0 0; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+}
+.backup-content-cards { margin: 0; }
+.backup-content-toolbar { display: flex; align-items: center; gap: 8px; }
+.backup-content-search { flex: 1 1 auto; min-width: 0; }
+.backup-content-table {
+  display: flex; flex-direction: column; max-height: 280px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.backup-content-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.backup-content-row:last-child { border-bottom: none; }
+.backup-content-head { position: sticky; top: 0; background: var(--surface); z-index: 1; padding: 0; }
+.backup-content-col-btn {
+  flex: 1 1 auto; text-align: left; background: none; border: none; color: var(--muted);
+  font: inherit; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.02em; padding: 6px 8px; cursor: pointer;
+}
+.backup-content-col-btn.backup-content-cell-date,
+.backup-content-col-btn.backup-content-cell-chars,
+.backup-content-col-btn.backup-content-cell-kind { flex: 0 0 auto; min-width: 84px; text-align: right; }
+.backup-content-col-btn:hover, .backup-content-col-btn.sorted { color: var(--fg); }
+.backup-content-col-btn.sorted::after { content: " \25B2"; }
+.backup-content-col-btn.sorted.sorted-desc::after { content: " \25BC"; }
+.backup-content-cell-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--fg);
+}
+.backup-content-cell-date, .backup-content-cell-chars {
+  flex: 0 0 auto; min-width: 84px; text-align: right; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.backup-content-cell-kind {
+  flex: 0 0 auto; min-width: 84px; text-align: right; color: var(--muted);
+}
+.backup-content-empty { padding: 10px; text-align: center; }
+
+/* Background jobs (header button + popover). */
+.bg-ops-btn { position: relative; }
+.bg-ops-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px; min-width: 220px;
+}
+.bg-ops-row:hover { background: var(--surface-2); }
+.bg-ops-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-ops-pct { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bg-ops-action { flex: 0 0 auto; padding: 2px 8px; font-size: 12px; }
+
+/* Copies from other apps: badge (also used by the background-tasks button) and row chrome. */
+.clip-badge {
+  position: absolute; top: -2px; right: -2px;
+  display: grid; place-items: center;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: var(--accent-fg);
+  font-size: 9px; font-weight: 700; line-height: 1;
+  pointer-events: none;
+}
+.clip-list { max-height: 66vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 6px; }
+.clip-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.clip-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.clip-preview {
+  font-size: 13px; color: var(--fg); white-space: pre-wrap; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.clip-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
+/* An entry copied in another app, inside the copy history: the row copies, two icons sit
+   beside the text and look like the edit icon of the app's own history rows. */
+.clip-row.journal-clip { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.clip-row.journal-clip:hover { border-color: var(--accent); }
+.clip-row.journal-clip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.clip-row.journal-clip .clip-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.clip-row.journal-clip .clip-preview { -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; flex: 1 1 auto; min-width: 0; }
+.clip-row.journal-clip .clip-time { flex: 0 0 auto; order: 2; }
+.clip-row.journal-clip .clip-actions { flex: 0 0 auto; align-items: center; }
+.clip-row.journal-clip .clip-actions .icon-btn { border: 1px solid var(--border); border-radius: 8px; }
+.clip-row.journal-clip .clip-actions .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.clip-row.journal-clip .clip-actions .clip-save { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 10px; font-size: 12px; }
+
+/* OCR language pack management dialog (#ocr-langs-modal): rows reuse the
+   .clip-row/.clip-list list chrome above, laid out as a horizontal strip: the
+   name is the most prominent thing in the row, tag/version sit under it as
+   secondary text, the size is its own right-aligned column, state is a chip. */
+.lang-row { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
+.lang-row-main { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lang-row-name { font-size: 14px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-row-sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lang-row-size { flex: 0 0 auto; min-width: 56px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lang-row-chip {
+  flex: 0 0 auto; padding: 2px 9px; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+.lang-row-chip.installed { border-color: var(--accent); color: var(--accent); }
+.ocr-lang-row .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ocr-lang-check { color: var(--accent); font-weight: 700; align-self: center; }
+.ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
+.ocr-langs-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.ocr-langs-foot .modal-hint { margin: 0; }
+/* Raw PowerShell/DISM text behind an elevation-needed notice: collapsed
+   by default so it never crowds out the actual instruction above it. */
+.lang-error-details { margin-top: 6px; }
+.lang-error-details > summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.lang-error-details-text {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Editor text bar with the placeholder helper */
+.modal-text-bar { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+.modal-vars-hint { flex: 1; min-width: 0; margin: 0; }
+
+/* Variable helper in the editor: reserved-name chips + the name/options insert row. */
+.vars-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.vars-chip {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.vars-chip:hover { border-color: var(--accent); color: var(--fg); }
+.vars-new { display: flex; align-items: center; gap: 6px; }
+.vars-new .modal-input { min-width: 0; padding: 3px 8px; font-size: 12px; }
+.vars-new-name { flex: 1 1 40%; }
+.vars-new-opts { flex: 1 1 60%; }
+.vars-new .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+.modal-text-bar .modal-hint { margin: 0; }
+
+.lib-section {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 8px 4px 2px;
+}
+.lib-section:first-child { padding-top: 0; }
+
+/* Color dots of the batch color bars */
+.lib-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Copy-history journal: one list, a sort field switches recent | most used, uniform rows.
+   Fills the available height; the list scrolls when there are many entries. */
+.journal-body {
+  flex: 1 1 auto;
+  /* Same floor the library list keeps: without it a short window squeezed the list
+     down to a 31px sliver. */
+  min-height: 120px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-content: start;
+  /* hidden auto (not just overflow-y): with only overflow-y set, the spec promotes
+     overflow-x to auto, so sub-pixel grid rounding spawns a phantom horizontal
+     scrollbar even though the list fits. Clip X explicitly to kill it. */
+  overflow: hidden auto;
+  /* Cancel the modal's right padding so the scrollbar sits at the edge like the
+     library, with the same 20px content inset. */
+  margin-right: -20px;
+  padding-right: 20px;
+  /* Always reserve the scrollbar gutter so toggling "grouped" (fewer/more rows)
+     never changes the table width. */
+  scrollbar-gutter: stable;
+}
+/* Type chips + colour dots share one row (colours to the right of the chips). */
+/* One filter row for BOTH windows: type chips left, colours right of them. */
+.journal-filters { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
+.journal-filters > .lib-colors { flex: 1 1 auto; min-width: 0; }
+/* Row one of the history filters: the search field with the source select beside it. */
+.journal-search-row { display: flex; gap: 8px; align-items: center; }
+.journal-search-row > .lib-sort, .journal-search-row > .journal-source-field { flex: 0 0 auto; }
+.journal-source-field > .cols-label { font-size: 12px; color: var(--muted); }
+.journal-source-field.hidden { display: none; }
+.journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.journal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.journal-body::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+/* Every entry the same height; never overlapping. A hairline between rows gives the
+   column a grid instead of a float of loose cards. */
+.journal-col .lib-item { min-height: 40px; align-items: center; padding: 8px 10px; margin: 0; flex: 0 0 auto; }
+.journal-col .lib-item + .lib-item { border-top: 1px solid var(--border); border-radius: 0; }
+.journal-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.journal-name-row > .lib-name { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.journal-when { margin-left: auto; flex: 0 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.journal-name-row > .lib-sub-right { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 11px; }
+.journal-when + .lib-sub-right { margin-left: 0; }
+/* Names the type without repeating the thumbnail's job: text rows carry no chip. */
+.journal-kind {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.journal-col .lib-thumb { width: 30px; height: 30px; flex: 0 0 auto; object-fit: cover; }
+.journal-col .lib-section { padding: 2px 4px; }
+/* Column titles stay pinned while the list scrolls. */
+.journal-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.journal-head > span:first-child { font-size: 14px; font-weight: 600; }
+.journal-head .head-check { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.journal-head-extras { display: inline-flex; align-items: stretch; gap: 8px; flex: 0 0 auto; }
+.journal-sort { font-size: 12px; white-space: nowrap; line-height: 1; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.journal-sort:hover { border-color: var(--accent); color: var(--fg); }
+.journal-sort.rev { color: var(--accent); border-color: var(--accent); }
+
+/* Expert preset dropdown + free-entry number */
+.expert-select { width: auto; min-width: 120px; align-self: flex-start; }
+/* Themed, rounded select with a custom chevron (drops the raw OS triangle so the
+   dropdowns match the rest of the layout). EVERY select in the app wears it: the
+   look is defined once here and inherited by the library, backup and editor rows. */
+select,
+.expert-select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
+  /* Complete on its own so a bare <select> with no extra class never renders
+     with the plain OS look, only the chevron -- a select created without a
+     themed class used to have no border, background or text colour at all. */
+  background-color: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  font: inherit;
+}
+select:focus { border-color: var(--accent); outline: none; }
+option, optgroup { background-color: var(--surface); color: var(--fg); }
+option:checked { background-color: var(--accent); color: var(--accent-fg); }
+.expert-select { border-radius: 8px; }
+/* Label to the LEFT of every expert dropdown (was stacked above). */
+/* Label left, control right. Both sides stretch to the row's height, so the label
+   text is vertically CENTRED against the control it belongs to, while the control
+   itself hangs at the BOTTOM: that is what keeps two dropdowns side by side lined up
+   even when one label needs a second line in a longer language. */
+.field.expert-dropdown-row { flex-direction: row; align-items: stretch; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; align-items: center; }
+.expert-dropdown-row .expert-select { align-self: flex-end; flex: 0 0 auto; min-width: 140px; }
+/* Wide enough for four digits and nothing more: these fields hold days/hours. */
+.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 68px; align-self: flex-end; text-align: right; }
+.expert-dropdown-row .expert-num-unit { align-self: center; }
+/* The unit next to a free-entry retention/interval field: the preset options show
+   theirs on the option text ("7d"), so the number alone would look unit-less. */
+.expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+/* Inline reason line under recQuality/recFormat: always its own full-width row,
+   never squeezed beside the dropdown (flex-basis: 100% + the row's own flex-wrap). */
+.expert-row-hint { flex: 1 1 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
+.expert-row-hint-btn { flex: 0 0 auto; }
+.path-out { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
+/* align-items: the reset icon has a fixed 22px height, so without this it hangs at
+   the top edge of the taller Change button instead of sitting level with it. */
+.path-btns { display: flex; gap: 8px; margin-top: 4px; align-items: center; }
+.path-btns .ghost-btn { flex: 1; }
+/* recordingDir's folder-size readout + its manage button, right under
+   the Change/Reset row above. The screenshot folder row shows just the manage button. */
+.path-shot-manage { display: flex; margin-top: 6px; }
+.path-video-stats { display: flex; gap: 8px; margin-top: 6px; align-items: center; justify-content: space-between; }
+.path-video-stats span { font-size: 12px; color: var(--muted); }
+.path-video-stats button { flex: 0 0 auto; }
+.path-video-stats .retention-set-row { flex: 1 1 auto; margin: 0; }
+.path-video-stats .retention-set-row > span:first-child { font-size: 13px; color: var(--fg); }
+.path-video-stats .retention-set-row .modal-input { height: 30px; padding-block: 0; }
+/* Same quiet line under the sync folder row: when it was last read, how many files. */
+.path-sync-stats { margin-top: 6px; }
+.path-sync-stats span { font-size: 12px; color: var(--muted); }
+.expert-num { width: 90px; margin-top: 6px; }
+
+/* Header icons hidden when their feature flag is off */
+/* Hidden when copy history is off, unless the user keeps paused buttons around. */
+
+/* Drag & drop highlight while a file/text hovers the window */
+body.drag-over::after {
+  content: "";
+  position: fixed;
+  inset: 6px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 90;
+}
+
+/* Full-tile error overlay while the attached file is gone. */
+.tile { container-type: size; }
+.tile-error {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  /* Scales with the tile width: fills most of the button. */
+  /* Width AND height aware: wide flat tiles must not clip the bottom line. */
+  font-size: clamp(12px, min(19cqi, 26cqb), 64px);
+  line-height: 1.12;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+.tile.file-missing { border-color: var(--danger); }
+.tile.file-missing .tile-error { display: flex; }
+/* Active state for Image / Text toggle buttons */
+.modal-display-row .ghost-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+/* The rotate-mode row's Auto toggle. */
+.modal-rotate-auto.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.modal-rotate-auto:disabled { opacity: 0.4; pointer-events: none; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { color: var(--muted); font-size: 12px; }
+/* A real basis, not 0: with `flex: 1` all three buttons report a zero base size, so
+   the row never wraps and simply overflowed the dialog on a narrow settings popup. */
+.export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
+.export-row + .export-row { margin-top: 6px; }
+/* Labels stay on one line: a narrow dialog moves a whole button to the next row
+   instead of breaking its text in two. */
+.export-row .ghost-btn { flex: 1 1 auto; white-space: nowrap; }
+/* Export and its format choice stay together, format on the right. */
+.export-pair { display: flex; gap: 4px; min-width: 0; }
+.export-pair > .ghost-btn { flex: 1 1 0; min-width: 0; padding-inline: 4px; }
+.export-pair > select { flex: 0 0 auto; padding: 6px 24px 6px 10px; }
+/* Data: four equal columns. With the 16px gap the second column ends exactly where the
+   switch grid's left column ends (and the third starts where its right column starts). */
+#impexp-field .export-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 16px; }
+#impexp-field .export-row .ghost-btn { white-space: normal; line-height: 20px; }
+/* A long word such as "Exportieren" cannot wrap inside its button, so when the pair is too narrow
+   the format select drops under the button instead of running into it. */
+#impexp-field .export-row .export-pair { flex-wrap: wrap; }
+#impexp-field .export-row .export-pair > .ghost-btn { flex: 1 1 auto; min-width: min-content; white-space: normal; }
+#impexp-field .export-row .export-pair > select { flex: 1 1 auto; }
+@media (max-width: 468px) {
+  #impexp-field .export-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+/* System, row 1: the check button and the version status on the left, the auto-update switch
+   and its interval flush right. A narrow window or a long translation moves the right group to
+   a line of its own instead of cutting a label. */
+.update-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.update-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 0 1 auto; }
+.update-left > .ghost-btn { flex: 0 0 auto; padding-inline: 12px; }
+.update-auto { display: flex; align-items: center; gap: 16px; margin-inline-start: auto; min-width: 0; }
+.update-auto > .switch-field { flex: 0 0 auto; padding: 0; }
+.update-auto > .switch-field > span { white-space: nowrap; }
+.update-interval { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.update-interval-label { min-width: 0; white-space: nowrap; font-size: 13px; color: var(--fg); }
+.update-interval > select { flex: 0 0 auto; width: auto; padding-block: 6px; }
+/* Row 2: About and the Expert menu as two equal buttons side by side. */
+.update-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-block: 12px 8px; }
+.update-nav > button { min-width: 0; }
+/* Clickable version/status label, plain text look → releases page, or the update
+   dialog once an update is pending. */
+.update-version {
+  flex: 0 1 auto; min-width: 0;
+  background: none; border: none; padding: 0;
+  color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-align: left; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.update-version:hover { text-decoration: underline; }
+.update-version.update-avail { color: var(--accent-text); }
+.update-result { margin: 0; font-size: 12px; color: var(--muted); }
+.update-result.update-result-error { color: var(--danger); }
+

@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const ui = path.join(__dirname, "..", "ui");
-const css = fs.readFileSync(path.join(ui, "styles", "main.css"), "utf8");
+const css = require("./ui_sources.js").mainCss();
 const js = require("./ui_sources.js").mainWindowSource();
 const problems = [];
 const zOf = (re) => {

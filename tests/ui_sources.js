@@ -8,12 +8,17 @@ const path = require("path");
 const ui = path.join(__dirname, "..", "ui");
 const sources = JSON.parse(fs.readFileSync(path.join(__dirname, "ui_sources.json"), "utf8"));
 const mainWindowModules = sources.main_window_modules;
+// The shared stylesheet: one file per area under ui/styles, in the order the windows link them.
+const mainStyles = sources.main_window_styles;
 // The video editor window: video.js plus the modules it is split into.
 const videoWindowModules = sources.video_window_modules;
 
 const mainWindowFiles = () => mainWindowModules.map((name) => path.join(ui, name));
 const mainWindowSource = () => mainWindowFiles().map((f) => fs.readFileSync(f, "utf8")).join("\n");
 
+// The shared stylesheet as one text (the files hold whole rules, so their concatenation is the old single file).
+const mainCss = () => mainStyles.map((name) => fs.readFileSync(path.join(ui, "styles", name), "utf8")).join("");
+
 const videoWindowSource = () => videoWindowModules.map((name) => fs.readFileSync(path.join(ui, name), "utf8")).join("\n");
 
-module.exports = { mainWindowModules, mainWindowFiles, mainWindowSource, videoWindowModules, videoWindowSource };
+module.exports = { mainStyles, mainCss, mainWindowModules, mainWindowFiles, mainWindowSource, videoWindowModules, videoWindowSource };

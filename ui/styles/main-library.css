@@ -1,0 +1,642 @@
+/* ---- Prompt library ---- */
+/* One wide column by default; the libraryCols expert value sets the most columns, and a
+   column never gets narrower than --lib-col-min, so a narrow window shows fewer. */
+.library-list {
+  --lib-col-min: 320px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(var(--lib-col-min), calc((100% - (var(--lib-cols, 1) - 1) * 6px) / var(--lib-cols, 1))), 1fr));
+  gap: 6px;
+  align-content: start;
+  /* The list is the scroll area (not the modal), so the header + search stay put and
+     the scrollbar hugs the modal's right edge with the same 20px inset as settings. */
+  flex: 1 1 auto;
+  /* A flex item with its own overflow bottoms out at zero height, which left the list
+     as a 20px sliver on a short window. Keep a usable floor and let the dialog scroll. */
+  min-height: 120px;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+  margin: 0 -20px -20px 0;
+  padding: 0 20px 20px 0;
+}
+.library-list .hint { grid-column: 1 / -1; color: var(--muted); font-size: 12px; padding: 6px 2px; }
+.library-list::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.library-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.library-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.library-list::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+@media (max-width: 560px) { .library-list { grid-template-columns: 1fr; } }
+/* A row carries up to four action icons; on a narrow (or scaled-up) window they wrap
+   onto a second line instead of being pushed past the edge of the list. */
+.lib-item {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.lib-item:hover { border-color: var(--accent); }
+/* Rows that only matched via the fuzzy tier read dimmer than exact hits. */
+.lib-item.lib-fuzzy { opacity: 0.6; }
+.lib-item.lib-fuzzy:hover { opacity: 1; }
+/* Batch selection: checkbox + selected state + action bar. */
+.noflag-batchOps #library-select-btn { display: none; }
+/* Selection checkbox is a pure-CSS ::before shown only while the list is in select
+   mode: toggling the mode is a single class change, never a re-render. */
+.library-list.selecting .lib-item::before {
+  content: "";
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  margin-right: 4px;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  color: var(--accent-fg);
+}
+.library-list.selecting .lib-item.lib-selected::before {
+  content: "✓";
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.library-list.selecting .lib-item.lib-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.lib-batch-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px 2px 2px; margin-top: 8px;
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+/* Same bar, sitting above the grid instead of below the library list. */
+.grid-batch-bar {
+  margin: 0 0 8px; padding: 2px 2px 10px;
+  border-top: none; border-bottom: 1px solid var(--border);
+}
+.lib-batch-count { font-size: 12px; font-weight: 600; color: var(--fg); margin-right: 2px; }
+.lib-batch-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+.lib-batch-colors { display: inline-flex; gap: 4px; }
+.lib-batch-bar .ghost-btn:disabled, .lib-batch-bar select:disabled { opacity: 0.4; pointer-events: none; }
+/* The one slot for every notice above the grid: the front notice grows, the
+   counter button sits beside it, the others wait with display none. */
+.banner-stack { display: flex; align-items: flex-start; gap: 8px; flex: 0 0 auto; }
+.banner-stack > :not(.banner-more) { flex: 1 1 auto; margin: 0 0 8px; }
+.banner-stacked { display: none !important; }
+.banner-more { flex: 0 0 auto; }
+/* Onboarding-examples banner: same "sits above the grid" slot as the batch bar. */
+.examples-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+/* The persistent read-only line: same shape as examples-banner, but coloured
+   like the other write-safety warnings (expert-notice) since this one means
+   saves are silently not happening rather than just being informational. */
+.data-dir-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--danger);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+/* The demo-mode marker: an accent bar across the top, deliberately louder
+   and more permanent-looking than the other banners here, since its entire
+   job is to be impossible to miss while working in the sample library.
+   demoMode is an OPT_FLAG_LABELS entry (default off), so applyFlags() only
+   ever adds flag-demoMode when it is actually on -- hidden by default here,
+   shown by that class, the reverse of a default-on flag's noflag-<key>. */
+.demo-mode-banner {
+  display: none;
+}
+.flag-demoMode .demo-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex: 0 0 auto;
+}
+.lib-item .dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--border);
+  flex: 0 0 auto;
+}
+/* A text row's colour dot sits in a 30px box like a picture row's thumbnail, so the
+   titles of both kinds of row start at the same x. */
+.lib-item > .dot:not(.lib-tile-placeholder) {
+  width: 30px;
+  height: 30px;
+  margin-top: 0;
+  flex: 0 0 30px;
+  background: none;
+  display: grid;
+  place-items: center;
+}
+.lib-item > .dot:not(.lib-tile-placeholder)::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--border));
+}
+.lib-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.lib-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  align-self: center;
+  pointer-events: none;
+}
+/* Duration badge overlay (library/history only): wraps thumbEl's own element
+   without changing its own sizing rules above. */
+.lib-thumb-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.lib-thumb-duration {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.lib-item .lib-add,
+.lib-item .lib-edit,
+.lib-item .journal-delete {
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.lib-item .lib-add:hover,
+.lib-item .lib-edit:hover,
+.lib-item .journal-delete:hover { color: var(--accent); border-color: var(--accent); }
+/* Favorite star: dim by default, gold when starred. */
+.lib-item .lib-fav {
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.lib-item .lib-fav:hover { color: #f5b301; border-color: transparent; background: var(--surface-2); }
+.lib-item .lib-fav.active { color: #f5b301; border-color: transparent; }
+/* Favorites filter chip in the search bar. */
+.lib-fav-chip { color: var(--muted); }
+.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
+/* Show-archive filter chip: same idea, its own neutral accent. */
+.lib-archive-chip { color: var(--muted); }
+/* The tag glyph in front of the name; a pseudo-element keeps the chip text to the name alone. */
+#library-archive-label::before { content: "#"; opacity: 0.7; margin-inline-end: 1px; }
+.lib-archive-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Pinned searches: a pin button inside the search field pins the current query, tag
+   filters and sort; pinned searches sit at the top of the recent-searches list. */
+.lib-q-wrap { position: relative; }
+.lib-q-wrap .modal-input { width: 100%; padding-right: 30px; }
+.lib-search-pin {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.lib-search-pin:hover { color: var(--accent); }
+.lib-search-pin svg { display: block; margin: auto; }
+/* List/tiles toggle next to the type filter. */
+.lib-view-toggle { display: inline-flex; align-items: center; gap: 6px; }
+/* Tiles: same rows, same selection and right-click behaviour; only the layout
+   and what each one shows changes. A tile is just its picture and its name.
+   A low window shrinks the tiles so one row with its names still fits. */
+.library-list.lib-tiles-view {
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--lib-tile-size, 140px), 30vh), 1fr));
+  align-content: start;
+}
+.library-list.lib-tiles-view .lib-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px;
+  text-align: center;
+}
+.library-list.lib-tiles-view .lib-item .lib-thumb,
+.library-list.lib-tiles-view .lib-item .lib-thumb-wrap,
+.library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
+  width: 100%;
+  height: min(var(--lib-tile-size, 140px), 30vh);
+  align-self: stretch;
+}
+.library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
+  border-radius: 8px;
+  width: 100%;
+  margin: 0;
+}
+.library-list.lib-tiles-view .lib-item .lib-body { width: 100%; align-items: center; }
+.library-list.lib-tiles-view .lib-item .lib-name {
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+.library-list.lib-tiles-view .lib-item .lib-name-row { justify-content: center; }
+.library-list.lib-tiles-view .lib-item .lib-text,
+.library-list.lib-tiles-view .lib-item .lib-tag-marks,
+.library-list.lib-tiles-view .lib-item .lib-rotate-tag,
+.library-list.lib-tiles-view .lib-item .lib-image-hit-tag,
+.library-list.lib-tiles-view .lib-item .lib-note-hit-tag,
+.library-list.lib-tiles-view .lib-item .lib-add,
+.library-list.lib-tiles-view .lib-item .lib-edit,
+.library-list.lib-tiles-view .lib-item .lib-fav,
+.library-list.lib-tiles-view .lib-item .lib-delete { display: none; }
+/* Delete sits at the far right of a row and is the only destructive one there. */
+.lib-item .lib-delete {
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.lib-item .lib-delete:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Library header: "Close after copy" toggle + close button grouped right. */
+.modal-head-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 6px; gap: 8px; min-width: 0; }
+.head-toggle {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.head-toggle:hover { border-color: var(--accent); }
+/* A compact option in a dialog head (the library's Close after copy): a plain themed
+   checkbox with its label, since a switch there reads as another tab. */
+.head-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.head-check input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+/* Reusable busy state for a button: the label fades out and a small ring fades
+   in on the same spot, so the button never changes width. Under no-animations
+   and reduced motion the ring simply stays still. */
+.btn-busyable { position: relative; }
+.btn-busyable .btn-label { transition: opacity 200ms; }
+.btn-busyable .btn-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.btn-busyable.is-busy .btn-label { opacity: 0; }
+.btn-busyable.is-busy .btn-spinner { opacity: 1; animation: btn-spin 0.8s linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+.head-toggle.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* "Clear history" is a .head-toggle AND .head-clear; the base .head-toggle colour above
+   would win at equal specificity, so re-assert the danger colour more specifically. */
+.head-toggle.head-clear { color: var(--danger); }
+.head-toggle.head-clear:hover { border-color: var(--danger); }
+/* Library sort dropdown. */
+.head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* Search row of the library: the field takes what the sort, tiles and select controls leave. */
+.lib-toolbar { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.lib-toolbar > .lib-q-wrap { flex: 1 1 120px; min-width: 120px; }
+.lib-toolbar > .head-sort > .lib-sort { align-self: stretch; }
+.lib-filter-rows { display: flex; flex-direction: column; gap: 6px; }
+.lib-filter-rows.hidden { display: none; }
+/* Foot of the prompts tab: the compact options that apply to the whole list. */
+.lib-foot { display: flex; justify-content: flex-end; flex: 0 0 auto; }
+/* The list bleeds into the dialog padding so its scrollbar reaches the corner; with a foot
+   below it the bleed would run under the foot. */
+#library-panel-prompts .library-list { margin-bottom: 0; padding-bottom: 0; }
+#library-search.library-search { margin-bottom: 0; }
+.lib-sort {
+  padding: 5px 30px 5px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background-color: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lib-sort:hover { border-color: var(--accent); }
+/* The batch-bar "move to view" select matches its ghost-btn neighbours in
+   height and radius instead of looking like a foreign control; the themed
+   popup (attachSelectPicker) replaces its native OS dropdown list. Only
+   background-COLOR is set here, never the shorthand, so the chevron image the
+   global `select` rule already draws survives. */
+.batch-view-select {
+  padding: 8px 30px 8px 14px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.batch-view-select:hover { background-color: var(--surface-2); border-color: var(--accent); }
+.lib-name { font-weight: 600; overflow-wrap: anywhere; }
+/* Tags beside the name: flat labels without a frame, never clickable. */
+.lib-name-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.lib-name-row > .lib-name { flex: 0 1 auto; min-width: 0; }
+.lib-tag-marks { display: inline-flex; gap: 4px; flex: 0 0 auto; pointer-events: none; }
+.tag-mark { padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 500; line-height: 1.6; color: var(--muted); background: var(--surface); white-space: nowrap; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; }
+.lib-sub-right { flex: 0 0 auto; font-weight: 600; }
+.lib-text {
+  color: var(--muted);
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: var(--lib-preview-lines, 2);
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+/* Names which entry a rotating prompt's search hit came from: .lib-body is a
+   flex column, so align-self keeps this from stretching to the row's full width. */
+.lib-rotate-tag {
+  align-self: flex-start;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+/* Names a search hit that only came from the picture's recognized text.
+   Nothing in the visible name/body itself contains the query, so this is the
+   only thing telling the user why the row showed up. */
+.lib-image-hit-tag,
+.lib-note-hit-tag {
+  align-self: flex-start;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* A literal search hit inside a row's name or preview. */
+.lib-hit { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* Library search box + type filter chips */
+.library-search { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+/* Themed recent-searches dropdown (replaces the native autofill popup). */
+.search-suggest {
+  position: fixed;
+  z-index: 120;
+  max-height: 264px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.search-suggest::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.search-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.search-suggest::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.search-suggest-item { display: flex; align-items: center; border-radius: 7px; }
+.search-suggest-item:hover, .search-suggest-item.active { background: var(--surface-2); }
+.search-suggest-text {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px 7px 10px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Per-entry remove button: appears on row hover, reddens on its own hover. */
+.search-suggest-del {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+.search-suggest-item:hover .search-suggest-del, .search-suggest-item.active .search-suggest-del, .search-suggest-del:focus-visible { opacity: 1; }
+.search-suggest-del:hover { color: var(--danger); background: var(--surface); }
+/* Pin button before the x: shows on hover for a recent row, always lit for a pinned one. */
+.search-suggest-pin {
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 2px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+.search-suggest-item:hover .search-suggest-pin, .search-suggest-item.active .search-suggest-pin, .search-suggest-pin:focus-visible { opacity: 1; }
+.search-suggest-pin:hover { color: var(--accent); background: var(--surface); }
+.search-suggest-item[data-pinned="1"] .search-suggest-pin { opacity: 1; color: var(--accent); }
+.search-suggest-item[data-pinned="1"] .search-suggest-text { flex: 0 1 auto; }
+.search-suggest-tags {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A pinned search without a query: the tags alone, aligned with the text of the other rows. */
+.search-suggest-tags:first-child { margin-left: 10px; }
+.lib-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.lib-type {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.lib-type:hover { border-color: var(--accent); color: var(--fg); }
+.lib-type.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* The favorites-only chip is also a .lib-type, whose later .active rule would win at
+   equal specificity; keep its gold highlight with a more specific selector. */
+.lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
+
+/* Expert: copy text-size + font dropdowns share one row. */
+.hotkey-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
+.hotkey-row .ghost-btn { flex: 0 0 auto; }
+
+/* Global hotkeys block of the shortcuts dialog: global row pinned first, then
+   every prompt with one, each row its own live hotkey-recording field (see
+   bindHotkeyField). The dialog drops its narrow width while this block shows. */
+#shortcuts-modal .modal:not(.modal-narrow) { width: min(460px, 92vw); }
+.shortcuts-global { display: flex; flex-direction: column; gap: 10px; }
+.shortcuts-section-title { margin: 0; font-size: 13px; font-weight: 700; }
+.hotkeys-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; min-height: 0; }
+.hotkeys-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
+.hotkeys-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.hotkeys-row-name.hotkeys-row-global { font-weight: 600; }
+.hotkeys-row .modal-input { flex: 0 0 150px; min-width: 0; cursor: pointer; }
+.hotkeys-row .ghost-btn { flex: 0 0 auto; }
+.hotkeys-empty { color: var(--muted); font-size: 13px; padding: 12px 4px; text-align: center; margin: 0; }
+/* Paired dropdowns now stack full-width so each keeps the label-left layout. */
+/* Runs of narrow label+control rows share a line. auto-fit means the second column
+   only appears when both fit at their minimum, so a narrow window or a long
+   translation drops back to one per line instead of squeezing the labels. */
+.expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 14px; align-items: stretch; }
+.expert-cols > .field { min-width: 0; margin: 0; }
+
+/* First-run tour: one shared frame, only the body content changes per step. */
+.tour-modal-box { width: min(560px, 92vw); }
+.tour-head { margin-bottom: 2px; }
+/* --tour-step-min-h is measured once per open (tallest of the steps) so the
+   modal never visibly resizes while stepping through it. */
+.tour-body { min-height: var(--tour-step-min-h, 240px); display: flex; align-items: center; }
+.tour-step { display: flex; align-items: center; gap: 20px; width: 100%; }
+.tour-art { flex: 0 0 auto; width: 110px; height: 110px; color: var(--fg); }
+.tour-art svg { display: block; width: 100%; height: 100%; }
+.tour-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tour-text p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.tour-dots { display: flex; align-items: center; gap: 6px; }
+.tour-dot { appearance: none; border: none; background: none; padding: 2px; font-size: 14px; line-height: 1; color: var(--accent); cursor: pointer; opacity: 0.5; }
+.tour-dot:hover { opacity: 0.8; }
+.tour-dot.active { opacity: 1; }
+.tour-nav { display: flex; gap: 8px; }
+/* A two-column dropdown row is too narrow for label-beside-field: a short
+   label (copySize) fit, a long one wrapped and looked different
+   from its neighbour. Always stack here; the full-width row above keeps label
+   left of field as the standard layout requires. */
+.expert-cols .expert-dropdown-row { flex-direction: column; align-items: stretch; }
+.expert-cols .expert-dropdown-row .expert-select,
+.expert-cols .expert-dropdown-row .expert-num {
+  align-self: stretch; width: 100%;
+  /* the base rule's flex-basis is a WIDTH for the row's normal (row) axis; stacked
+     into a column here, the same basis would pin the control's HEIGHT instead. */
+  flex: 0 0 auto;
+}
+/* A setting that hangs off a toggle is stepped in, so a feature and its parameters
+   read as one block. Indentation alone carries it; a rule down the left edge only
+   added noise. Each further level steps in again, so a parameter unlocked by an
+   unlocked toggle sits deeper than its parent. */
+.expert-sub { margin-left: calc(var(--expert-depth, 1) * 18px); }
+
+/* Editable colour palette (expert > Appearance). */
+.palette-field { gap: 10px; }
+.palette-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px; }
+.palette-swatch {
+  width: 100%;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.palette-swatch:hover { border-color: var(--accent); }
+.palette-reset { align-self: flex-start; }
+
+/* Fixed placeholder values, the expert menu's variables group. */
+.var-fixed-field { gap: 8px; }
+.var-fixed-heading { font-size: 12px; font-weight: 600; color: var(--muted); }
+.var-fixed-list { display: flex; flex-direction: column; gap: 6px; }
+.var-fixed-row { display: flex; align-items: center; gap: 8px; }
+.var-fixed-name {
+  flex: 0 0 auto;
+  min-width: 80px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.var-fixed-value { flex: 1; min-width: 0; }
+.var-fixed-del { flex: 0 0 auto; }
+.var-fixed-add { display: flex; align-items: center; gap: 8px; }
+.var-fixed-add-name { flex: 0 0 140px; }
+.var-fixed-add-value { flex: 1; min-width: 0; }
+.var-fixed-add-btn { flex: 0 0 auto; }
+.var-fixed-empty { color: var(--muted); font-size: 12px; }
+
+/* Confirm dialog (discard unsaved changes) */
+.confirm-msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.primary-btn.danger-confirm { background: var(--danger); color: #fff; }
+.ghost-btn.danger-confirm { color: var(--danger); border-color: var(--danger); }
+
+/* Attached-file row icon slot */
+.modal-file-icon { display: inline-flex; flex: 0 0 auto; }
+

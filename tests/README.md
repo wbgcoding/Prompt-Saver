@@ -112,7 +112,7 @@ sweep the temp folder take their own root (`sweep_test_root`).
 | `python tests/expert_menu_check.py` | Every expert tab entry exists once, no `gate:` on an unknown flag, nothing unreachable, every `DEPENDENCIES` pair really carries the parent's gate in the parent's own group; every `EXPERT_NOTICES` entry is declared, shown by exactly one group, has both its strings, and never doubles as a flag key. |
 | `python tests/settings_directory_check.py` | Every `SETTINGS_DIRECTORY` entry (the expert search's cross-area hits: normal settings, toolbar, library, backups) points at a real element and a real i18n key; every real setting control in `#settings-main` is either in the directory or explicitly whitelisted as not a setting. |
 | `python tests/automation_doc_check.py` | `docs/automation.md`'s generated command table matches `docs/automation-manifest.json` (itself checked against `command_manifest()` in `src-tauri/src/cli.rs` by a `cargo test --lib` case) -- catches a command added to the CLI without the doc being regenerated via `tests/gen_automation_doc.py`. |
-| `python tests/layout/modal_scroll_test.py` | Real edit-modal markup plus `main.css` in headless Chromium at five small viewports down to the app minimum: the expanded version history keeps a usable height and Save stays reachable. Also the theme editor (one column at 520 px, two at 900 px, Save reachable in both). |
+| `python tests/layout/modal_scroll_test.py` | Real edit-modal markup plus the shared stylesheet in headless Chromium at five small viewports down to the app minimum: the expanded version history keeps a usable height and Save stays reachable. Also the theme editor (one column at 520 px, two at 900 px, Save reachable in both). |
 | `node tests/chainvars_check.js` | `chainVarReport()` (`ui/chainvars.js`): the chain overview's variable check marks each step that asks for a placeholder no earlier step carries, and nothing when every one is fulfilled; reserved self-filling names never count as a gap. |
 | `node tests/snap_check.js` | `snapMove()` (`ui/snap.js`), the drag-snap helper the screenshot editor and the video editor share: a dragged shape or overlay snaps onto a canvas line within the tolerance and reports the guide line, and is left untouched beyond the tolerance. |
 | `node tests/composer_stack_check.js` | `composerToolCols()` (`ui/composerTools.js`): the composer tool grid gets its column count from the rendered input height (6 buttons: 6, 3, 2, 2 columns at 40, 82, 124, 160 px; 4 buttons at 160 px: 2), never leaves an empty row and survives zero buttons or an unusable height. |
@@ -209,6 +209,10 @@ main window is appended to the json in the commit that creates it.
 The video editor window works the same way: `video_window_modules` lists `ui/video.js` and the
 modules split from it; tests read them through `video_window_source()` (Python) and
 `videoWindowSource()` (JS).
+
+The shared stylesheet is split the same way: `main_window_styles` in the json lists the files
+under `ui/styles/` in link order; tests that scan it read them as one text through
+`mainCss()` (JS) or the `MAIN_STYLES` list (Python), never `main.css` alone.
 
 ## Moving code
 `python tools/move_check.py [--base REV] [--max N]` proves that a staged change under `ui/`

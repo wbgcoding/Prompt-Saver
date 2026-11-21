@@ -1352,7 +1352,7 @@ export function keepChangedRow(kind, key, changed, shownSet) {
   return true;
 }
 // The filter is a pill whose checkbox is visually hidden, so the "on" look is a
-// class rather than :checked (:has() is avoided project-wide, see main.css:733).
+// class rather than :checked (:has() is avoided project-wide, see the .media-hover note in main.css).
 export const syncOnlyChangedChip = () =>
   $("expert-only-changed-chip")?.classList.toggle("active", expertOnlyChanged);
 // Does this row differ from its shipped default? Actions and the colour palette

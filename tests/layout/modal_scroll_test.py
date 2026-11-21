@@ -1,6 +1,6 @@
 """Regression test: the edit dialog stays usable on a small window.
 
-Renders the real edit-modal markup with the real ui/styles/main.css in headless
+Renders the real edit-modal markup with the real shared stylesheet (ui/styles/main*.css) in headless
 Chromium and asserts that, with the version history expanded, the list keeps a
 usable height and the Save row is reachable by scrolling.
 
@@ -27,6 +27,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 STYLES = REPO / "ui" / "styles"
+sys.path.insert(0, str(REPO / "tests"))
+from ui_sources import MAIN_STYLES  # noqa: E402
+
+# The shared stylesheet is one file per area; the harness pages link them all, in order.
+MAIN_LINKS = "".join(f'<link rel="stylesheet" href="styles/{n}">' for n in MAIN_STYLES)
 
 # A row is only as tight as its longest label, so every measurement runs three
 # times: English, Polish and Romanian, the wordiest of the UI
@@ -204,7 +209,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     # right above the colour row and always takes its space; font and size live in
     # the collapsed advanced options and take no room here.
     html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
-<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
+{MAIN_LINKS}<style>body{{margin:0}}</style></head><body class="flag-tags">
 <div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">{L('editModalTitle')}</h2>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button>
@@ -330,7 +335,7 @@ def build_theme_page(out_dir: Path, name: str = "theme.html", n_groups: int = 4,
         for g in range(n_groups)
     )
     html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
-<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body>
+{MAIN_LINKS}<style>body{{margin:0}}</style></head><body>
 <div id="theme-modal" class="overlay" role="dialog" aria-modal="true"><div class="modal modal-narrow">
   <div class="modal-head"><h2 class="modal-title">{L('themeEditor')}</h2>
     <button class="icon-btn" type="button">X</button></div>

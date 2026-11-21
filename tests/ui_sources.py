@@ -15,6 +15,8 @@ UI = REPO / "ui"
 
 _SOURCES = json.loads((TESTS / "ui_sources.json").read_text(encoding="utf-8"))
 MAIN_WINDOW_MODULES = _SOURCES["main_window_modules"]
+# The shared stylesheet: one file per area under ui/styles, in the order the windows link them.
+MAIN_STYLES = _SOURCES["main_window_styles"]
 # The video editor window: video.js plus the modules it is split into.
 VIDEO_WINDOW_MODULES = _SOURCES["video_window_modules"]
 
