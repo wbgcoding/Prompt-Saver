@@ -3413,11 +3413,14 @@ select.modal-input { padding-right: 30px; }
 #modal.tall #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: var(--ta-fit, 120px); max-height: none; }
 .clear-btn {
   position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
-  width: 24px; height: 24px; display: grid; place-items: center;
+  width: 24px; height: 24px; padding: 0; display: grid; place-items: center;
   border: none; border-radius: 6px; background: transparent; color: var(--muted);
   opacity: 0; pointer-events: none; cursor: pointer;
   transition: opacity var(--transition), color var(--transition), background var(--transition);
 }
+/* A button keeps the browser's 6px side padding, which leaves a 12px content box for
+   the 16px glyph and pushes it right of the middle of the highlighted square. */
+.clear-btn svg { display: block; }
 /* A text box X sits on the first line: centred on a one-line box (1px border + 10px
    padding + half the 19px line = 20.5px, minus half the 24px button). */
 .clear-wrap-ta .clear-btn { top: 8.5px; transform: none; }

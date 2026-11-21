@@ -72,4 +72,30 @@ def run(browser, tmp):
     }
     document.documentElement.style.removeProperty('--icon-zoom');
     """)
+    # The clear X glyph sits in the exact middle of its button box (the hover highlight), for the text box and for a one-line field, at every icon scale.
+    failed += ar_probe('bco05', 'composer: the clear X glyph is centred in its hover highlight at every icon scale', 'index', '880x600', '', r"""
+    await bootReady();
+    const core = await import('./core.js');
+    document.getElementById('library-btn').click();
+    await sleep(500);
+    const fields = [['text box', core.inputEl], ['one-line field', document.getElementById('library-q')]];
+    for (const [name, field] of fields) {
+      for (const z of ['1', '1.25', '1.5']) {
+        document.documentElement.style.setProperty('--icon-zoom', z);
+        field.value = 'abc';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(60);
+        const btn = field.parentElement.querySelector('.clear-btn.show');
+        const svg = btn && btn.querySelector('svg');
+        if (!svg) { errs.push('bco05: precondition: no visible clear X on the ' + name + ' at zoom ' + z); continue; }
+        const b = btn.getBoundingClientRect(), g = svg.getBoundingClientRect();
+        const dx = (g.left + g.width / 2) - (b.left + b.width / 2);
+        const dy = (g.top + g.height / 2) - (b.top + b.height / 2);
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) errs.push('bco05: ' + name + ' glyph is off by ' + dx.toFixed(2) + ' / ' + dy.toFixed(2) + ' px at icon zoom ' + z);
+        field.value = '';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+    document.documentElement.style.removeProperty('--icon-zoom');
+    """)
     return failed
