@@ -509,7 +509,8 @@ pub(crate) static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(
 // ffmpeg process still reading the source cannot lose that race against the delete. Each
 // thread removes its own entry when done, cancelled or not. The string is the cropped part's
 // path: an earlier take's crop (its parts wait for a decision) is not the current take's.
-pub(crate) static REC_INTERIM_CROPS: Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>, String)>> = Mutex::new(Vec::new());
+pub(crate) type InterimCrop = (Arc<AtomicBool>, std::thread::JoinHandle<()>, String);
+pub(crate) static REC_INTERIM_CROPS: Mutex<Vec<InterimCrop>> = Mutex::new(Vec::new());
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct CropProgressPayload {
