@@ -794,13 +794,14 @@ pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, all
 pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>, take: String) -> u32 {
     let allowed = recording_source_dirs(&app, &state);
     wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
-    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    // Only this take's parts go; a failed one stays listed, ahead of the other take's.
-    let mut mine = split_take_parts(&mut parts, Some(&take));
-    let moved = discard_recording_parts_in(&mut mine, &allowed, &allowed[1]);
-    mine.append(&mut parts);
-    *parts = mine;
-    moved
+    discard_take_parts(&REC_RESULT_PARTS, &take, &allowed, &allowed[1])
+}
+
+// Only this take's parts go; a failed one stays listed, ahead of the other take's. The list is
+// not locked while the files move (a move across drives is a full copy), so a new stop can
+// register its parts and the stale sweep can read the list meanwhile.
+pub(crate) fn discard_take_parts(shared: &Mutex<Vec<RecordingPartInfo>>, take: &str, allowed: &[PathBuf], recording_root: &Path) -> u32 {
+    with_parts_outside_lock_for(shared, Some(take), |mine| discard_recording_parts_in(mine, allowed, recording_root))
 }
 
 // The folder picker for the video editor's "choose folder" export target and the batch-export

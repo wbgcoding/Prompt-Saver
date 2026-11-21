@@ -550,3 +550,31 @@ fn a_failed_part_of_one_take_stays_listed_for_that_take_only() {
     assert_eq!(takes, vec!["a.mp4".to_string(), "b.mp4".to_string()]);
     let _ = fs::remove_dir_all(&base);
 }
+
+// Discarding a take's parts moves files (a full copy across drives): the shared list must not
+// stay locked meanwhile, or a new stop registering its parts and the stale sweep would block.
+#[test]
+fn discarding_a_take_keeps_the_part_list_unlocked_while_files_move() {
+    let mf = source!("../media_files.rs");
+    let cmd = &mf[mf.find("pub(crate) fn discard_recording_parts(").unwrap()..];
+    let cmd = &cmd[..cmd.find("\n}\n").unwrap()];
+    assert!(!cmd.contains("REC_RESULT_PARTS.lock()"), "the command never holds the list lock itself");
+    let helper = &mf[mf.find("pub(crate) fn discard_take_parts(").unwrap()..];
+    let helper = &helper[..helper.find("\n}\n").unwrap()];
+    assert!(helper.contains("with_parts_outside_lock_for(shared, Some(take)"), "the move runs outside the lock, gated like a save");
+
+    let base = std::env::temp_dir().join(format!("ps-test-discard-take-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    let src = base.join("recordings");
+    fs::create_dir_all(&src).unwrap();
+    let list = std::sync::Mutex::new(Vec::new());
+    register_result_parts(&list, "a.mp4", &[part_info(&src, "rec-2026-01-01-03-00-00_part1.mp4"), part_info(&src, "notes-a.mp4")]);
+    register_result_parts(&list, "b.mp4", &[part_info(&src, "rec-2026-01-01-04-00-00_part1.mp4")]);
+    let allowed = vec![src.clone()];
+    assert_eq!(discard_take_parts(&list, "a.mp4", &allowed, &src), 1, "only the recording part of the take moves");
+    assert!(src.join("verworfen").join("rec-2026-01-01-03-00-00_part1.mp4").is_file());
+    assert!(src.join("rec-2026-01-01-04-00-00_part1.mp4").is_file(), "the other take is untouched");
+    let left: Vec<(String, String)> = list.lock().unwrap().iter().map(|p| (p.take.clone(), Path::new(&p.path).file_name().unwrap().to_string_lossy().to_string())).collect();
+    assert_eq!(left, vec![("a.mp4".to_string(), "notes-a.mp4".to_string()), ("b.mp4".to_string(), "rec-2026-01-01-04-00-00_part1.mp4".to_string())], "a refused part stays listed for its take, ahead of the other take");
+    let _ = fs::remove_dir_all(&base);
+}
