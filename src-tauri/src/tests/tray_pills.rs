@@ -331,10 +331,10 @@ fn tray_menu_window_is_reused_and_revealed_by_its_page() {
     assert!(get < build);
     // A hidden WebView2 is throttled: the open wakes it off-screen at full size, and
     // only the reveal moves it into place.
-    let wake = body.find("set_bounds_phys(&win, tray_wake_rect(rect))").expect("wakes the window off-screen");
+    let wake = body.find("set_bounds_phys(&win, tray_wake_rect(rect, &monitor_scales(app)))").expect("wakes the window off-screen");
     let show = body.find("win.show()").expect("shows the window to wake it");
     assert!(wake < show, "the window must be off-screen before it is shown");
-    let r = tray_wake_rect(Rect { x: 100.0, y: 200.0, w: 240.0, h: 300.0 });
+    let r = tray_wake_rect(Rect { x: 100.0, y: 200.0, w: 240.0, h: 300.0 }, &[]);
     assert!(r.x <= -30000.0 && r.y <= -30000.0 && r.w == 240.0 && r.h == 300.0);
     let c = src.find("pub(crate) fn tray_window_close").expect("tray_window_close");
     let d = c + src[c..].find("
@@ -343,6 +343,50 @@ fn tray_menu_window_is_reused_and_revealed_by_its_page() {
     assert!(!src[c..d].contains(".close()"), "closing the menu only hides the warm window");
     let js = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/tray.js")).expect("ui/tray.js");
     assert!(js.contains("listen(\"tray-open\"") && js.contains("invoke(\"tray_window_reveal\")"));
+}
+
+// A 100 % main screen between two 150 % screens, the far-left one the nearest to the old
+// fixed spot at (-32000, -32000): the menu woke there at 150 % and opened on the 100 % screen.
+fn mixed_dpi_monitors() -> Vec<(Rect, f64)> {
+    vec![
+        (Rect { x: 2560.0, y: -286.0, w: 3840.0, h: 2160.0 }, 1.5),
+        (Rect { x: 0.0, y: 0.0, w: 2560.0, h: 1440.0 }, 1.0),
+        (Rect { x: 3563.0, y: -766.0, w: 1920.0, h: 480.0 }, 1.0),
+        (Rect { x: -3840.0, y: -286.0, w: 3840.0, h: 2160.0 }, 1.5),
+    ]
+}
+
+#[test]
+fn the_tray_menu_wakes_off_screen_at_the_scale_of_the_monitor_it_opens_on() {
+    let mons = mixed_dpi_monitors();
+    let menu = Rect { x: 2300.0, y: 1100.0, w: 240.0, h: 280.0 };
+    let r = tray_wake_rect(menu, &mons);
+    assert_eq!((r.w, r.h), (240.0, 280.0), "the wake keeps the final size");
+    assert!(mons.iter().all(|(m, _)| !m.overlaps(&r)), "never visible on any monitor: {r:?}");
+    assert!(r.x > -30000.0, "beside its own monitor, not at the far spot that belongs to the 150 % screen");
+    assert_eq!(r.y, 1442.0, "right below the 100 % main screen");
+    // On a 150 % screen the spot lies beside that screen.
+    let left = tray_wake_rect(Rect { x: -1000.0, y: 1500.0, w: 360.0, h: 420.0 }, &mons);
+    assert!(mons.iter().all(|(m, _)| !m.overlaps(&left)));
+    assert_eq!(left.y, 1876.0);
+}
+
+#[test]
+fn the_tray_menu_falls_back_to_the_far_spot_when_no_side_is_free() {
+    // A single monitor ringed by others at another scale on every side.
+    let mid = Rect { x: 0.0, y: 0.0, w: 1000.0, h: 1000.0 };
+    let mons = vec![
+        (mid, 1.0),
+        (Rect { x: -3000.0, y: 1000.0, w: 7000.0, h: 1000.0 }, 2.0),
+        (Rect { x: -3000.0, y: -1000.0, w: 7000.0, h: 1000.0 }, 2.0),
+        (Rect { x: 1000.0, y: 0.0, w: 1000.0, h: 1000.0 }, 2.0),
+        (Rect { x: -1000.0, y: 0.0, w: 1000.0, h: 1000.0 }, 2.0),
+    ];
+    let r = tray_wake_rect(Rect { x: 400.0, y: 400.0, w: 240.0, h: 280.0 }, &mons);
+    assert!(r.x <= -30000.0 && r.y <= -30000.0);
+    // A menu outside every known monitor keeps the far spot too.
+    let off = tray_wake_rect(Rect { x: 9000.0, y: 9000.0, w: 240.0, h: 280.0 }, &mons);
+    assert!(off.x <= -30000.0);
 }
 
 #[test]

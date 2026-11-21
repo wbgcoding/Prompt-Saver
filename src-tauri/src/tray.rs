@@ -729,7 +729,7 @@ pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: boo
         }
     };
     set_capture_exclusion(&win, excluded);
-    set_bounds_phys(&win, tray_wake_rect(rect));
+    set_bounds_phys(&win, tray_wake_rect(rect, &monitor_scales(app)));
     let _ = win.show();
     let _ = app.emit_to(TRAY_WIN_LABEL, "tray-open", ());
     let app2 = app.clone();
@@ -742,9 +742,59 @@ pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: boo
     });
 }
 
-// The waking spot: the final size, far outside every monitor.
-pub(crate) fn tray_wake_rect(r: Rect) -> Rect {
-    Rect { x: -32000.0, y: -32000.0, w: r.w, h: r.h }
+// The waking spot: the final size, outside every monitor. Windows gives an off-screen window
+// the DPI of the nearest monitor, so a far-away spot can wake the menu at another scale than
+// the monitor it opens on (a 150 % screen at the far left, the tray on a 100 % one). The page
+// then draws at the wrong zoom and each reveal crosses a DPI boundary, which rescales the
+// window. So the spot sits right beside the menu's own monitor, on a side no monitor covers,
+// where that monitor (or one at the same scale) is the nearest. `monitors` holds each
+// monitor's full physical rect and scale factor.
+pub(crate) fn tray_wake_rect(r: Rect, monitors: &[(Rect, f64)]) -> Rect {
+    const GAP: f64 = 2.0;
+    let far = Rect { x: -32000.0, y: -32000.0, w: r.w, h: r.h };
+    let (cx, cy) = r.center();
+    let contains = |m: &Rect| cx >= m.x && cx < m.right() && cy >= m.y && cy < m.bottom();
+    let Some((target, scale)) = monitors.iter().find(|(m, _)| contains(m)).copied() else { return far };
+    let dist = |a: &Rect, b: &Rect| {
+        let dx = (b.x - a.right()).max(a.x - b.right()).max(0.0);
+        let dy = (b.y - a.bottom()).max(a.y - b.bottom()).max(0.0);
+        dx * dx + dy * dy
+    };
+    let candidates = [
+        (r.x, target.bottom() + GAP),
+        (r.x, target.y - r.h - GAP),
+        (target.right() + GAP, r.y),
+        (target.x - r.w - GAP, r.y),
+    ];
+    candidates
+        .into_iter()
+        .map(|(x, y)| Rect { x, y, w: r.w, h: r.h })
+        .find(|c| {
+            if monitors.iter().any(|(m, _)| m.overlaps(c)) {
+                return false;
+            }
+            let nearest = monitors
+                .iter()
+                .min_by(|a, b| dist(c, &a.0).total_cmp(&dist(c, &b.0)))
+                .map(|(_, s)| *s);
+            nearest.is_some_and(|s| (s - scale).abs() < 0.01)
+        })
+        .unwrap_or(far)
+}
+
+// Every monitor's physical rect and scale factor, for tray_wake_rect.
+fn monitor_scales(app: &AppHandle) -> Vec<(Rect, f64)> {
+    let Some(win) = app.get_webview_window("main").or_else(|| app.webview_windows().into_values().next()) else {
+        return Vec::new();
+    };
+    win.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            let (p, s) = (m.position(), m.size());
+            (Rect { x: p.x as f64, y: p.y as f64, w: s.width as f64, h: s.height as f64 }, m.scale_factor())
+        })
+        .collect()
 }
 
 fn reveal_tray_window(app: &AppHandle) {
@@ -753,6 +803,9 @@ fn reveal_tray_window(app: &AppHandle) {
     }
     let rect = *TRAY_WIN_RECT.lock().unwrap_or_else(|e| e.into_inner());
     if let (Some(win), Some(rect)) = (app.get_webview_window(TRAY_WIN_LABEL), rect) {
+        set_bounds_phys(&win, rect);
+        // A move across a DPI boundary (no free spot at the menu's scale for the wake) makes
+        // the window rescale itself on arrival; the second call puts the size back.
         set_bounds_phys(&win, rect);
         let _ = win.show();
         let _ = win.set_focus();
