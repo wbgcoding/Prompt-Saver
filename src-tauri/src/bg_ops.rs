@@ -399,6 +399,7 @@ pub(crate) fn cancel_all_bg_ops() {
     cancel_all_exports();
     cancel_recording_convert();
     cancel_ffmpeg_download();
+    crate::whisper_cmds::cancel_whisper_download();
     cancel_ocr_index_backfill();
 }
 

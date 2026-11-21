@@ -157,6 +157,11 @@ mod ocr;
 mod voice_cmds;
 use voice_cmds::*;
 
+mod whisper;
+use whisper::*;
+
+mod whisper_cmds;
+
 // Windows.Media.SpeechRecognition binding. Same shape as mod ocr: COM init confined to the
 // thread that calls into WinRT, no unsafe outside RoInitialize. Unlike OCR, the recognition
 // session runs on one long-lived thread it owns for its whole lifetime (started by
@@ -994,6 +999,11 @@ pub fn run() {
             ffmpeg::download_ffmpeg,
             ffmpeg::grant_ffmpeg_download_consent,
             ffmpeg::cancel_ffmpeg_download,
+            whisper_cmds::whisper_catalog,
+            whisper_cmds::grant_whisper_download_consent,
+            whisper_cmds::download_whisper_model,
+            whisper_cmds::cancel_whisper_download,
+            whisper_cmds::delete_whisper_model,
             bg_ops::set_taskbar_progress,
             bg_ops::list_bg_ops,
             bg_ops::open_bg_op_folder,
