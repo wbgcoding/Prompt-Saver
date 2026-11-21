@@ -34,6 +34,7 @@ TARGET = "x86_64-pc-windows-msvc"
 # A file here that is not in the list, or a row whose proof is gone, fails.
 FILE_OWNERS = {
     "ffmpeg.exe": "FFmpeg",
+    "ffprobe.exe": "FFmpeg",
     "ffmpeg-LICENSE": "FFmpeg",
     "pdfium.dll": "PDFium",
 }
