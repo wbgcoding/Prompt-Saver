@@ -26,6 +26,10 @@ echo.
 rem Make sure cargo (Rust) is on PATH for this session.
 set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 
+rem The resource compiler step reads RC as the path to rc.exe. A calling script that uses RC
+rem for its own exit code would break the build, so a value that is no file is dropped.
+if defined RC if not exist "%RC%" set "RC="
+
 rem A previous build may have left a deferred swap behind (see the dist\ copy
 rem step below) because %APP_NAME%.exe was running at the time. Try the swap
 rem again now, before spending time on a new build; if it is still running,
