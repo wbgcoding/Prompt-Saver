@@ -773,3 +773,13 @@ fn an_armed_download_arrives_damaged_once_and_the_hash_rejects_it() {
     assert_eq!(std::fs::read(dir.join("m.bin")).unwrap(), body);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// The library panics when voice-activity detection is enabled before its model path is set;
+// the transcriber must not hit that on any phrase.
+#[cfg(feature = "whisper")]
+#[test]
+fn voice_activity_detection_is_set_up_without_a_panic() {
+    use whisper_rs::{FullParams, SamplingStrategy};
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    crate::whisper_engine::real::apply_vad(&mut params, "silero.bin");
+}

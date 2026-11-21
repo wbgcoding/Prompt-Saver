@@ -337,6 +337,13 @@ pub(crate) mod real {
         abort: Arc<AtomicBool>,
     }
 
+    // Voice-activity detection from the given model file. The library panics when VAD is
+    // switched on before its model path is set, so the path goes first.
+    pub(crate) fn apply_vad(params: &mut FullParams, vad_model: &str) {
+        params.set_vad_model_path(Some(vad_model));
+        params.enable_vad(true);
+    }
+
     impl Transcribe for WhisperTranscriber {
         fn transcribe(&mut self, samples: &[f32], lang: Option<&str>) -> Result<String, String> {
             let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -350,8 +357,7 @@ pub(crate) mod real {
             params.set_print_realtime(false);
             params.set_print_timestamps(false);
             if let Some(vad) = &self.vad {
-                params.enable_vad(true);
-                params.set_vad_model_path(Some(vad.as_str()));
+                apply_vad(&mut params, vad);
             }
             // The library keeps the closure's box for good (one small allocation per phrase). The
             // box type is spelled out because the library reads the pointer back as exactly that.
