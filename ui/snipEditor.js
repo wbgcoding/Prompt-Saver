@@ -125,6 +125,7 @@ export function initSnipEditor() {
   const snipEditTextInput = $("snip-edit-text-input");
   const snipEditMeasureEl = $("snip-edit-measure");
   const snipEditNudgeHintEl = $("snip-edit-nudge-hint");
+  const snipEditActionsBar = $("snip-edit-apply").parentElement;
   // Right-click menu for duplicating/deleting a shape, built once like the other dynamic
   // popovers.
   const snipCtxPop = document.createElement("div");
@@ -634,8 +635,8 @@ export function initSnipEditor() {
   // Text shown only while something is nudgeable. The arrow keys have no other job in this
   // editor, but a short line always says what they currently do.
   function snipEditUpdateNudgeHint() {
-    // The line itself is always reserved under the image; only its text comes and goes. The crop
-    // tool shows its own hint until the first drag.
+    // The hint floats over the bottom edge of the image area (no row of its own); only its text
+    // comes and goes. The crop tool shows its own hint until the first drag.
     const cropHint = SE.tool === "crop" && !SE.cropHintDismissed;
     snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged && !cropHint && SE.mode !== "ocr");
     // The hint names only what works on this kind: Ctrl+Arrow resizes a box, moves a line's end
@@ -2085,6 +2086,16 @@ export function initSnipEditor() {
   let snipEditOpenSeq = 0;
   // Hides what the crop view for text recognition does not use and swaps its title, apply label
   // and hint; every other open restores them all.
+  // The words of Save as, Keep and New screenshot turn into their icons the moment the bottom
+  // row would wrap, so Close stays on the row down to the smallest window in every language.
+  function snipEditFitActions() {
+    const bar = snipEditActionsBar;
+    bar.classList.remove("compact");
+    const kids = [...bar.children].filter((c) => c.getClientRects().length);
+    if (kids.length < 2) return;
+    const firstBottom = kids[0].getBoundingClientRect().bottom;
+    if (kids.some((c) => c.getBoundingClientRect().top >= firstBottom - 1)) bar.classList.add("compact");
+  }
   function snipEditApplyMode() {
     const ocr = SE.mode === "ocr";
     for (const id of ["snip-edit-saveas-format", "snip-edit-saveas", "snip-edit-keep"]) $(id).classList.toggle("hidden", ocr);
@@ -2106,6 +2117,7 @@ export function initSnipEditor() {
       apply.dataset.shortcut = "snipCancel";
       withShortcut(apply, "snipCancel");
     }
+    snipEditFitActions();
   }
   function snipEditOpen(dataUrl, { onClose, onCancel, actions, autoSaves, mode }) {
     const img = new Image();
@@ -2172,6 +2184,7 @@ export function initSnipEditor() {
       // take every key typed over the editor.
       snipEditHandKeysBack();
       snipSyncWinButtons();
+      snipEditFitActions(); // the bar settles first: the fit reads the area it leaves
       snipEditFit();
       snipEditWrap.scrollLeft = 0;
       snipEditWrap.scrollTop = 0;
@@ -2352,6 +2365,13 @@ export function initSnipEditor() {
   });
   $("snip-edit-retry").addEventListener("click", () => SE.actions?.retry?.());
   attachSelectPicker($("snip-edit-saveas-format"));
+  // Deferred a tick: the fit changes the bar itself, which an observer callback must not do inline.
+  let snipEditFitQueued = false;
+  new ResizeObserver(() => {
+    if (snipEditFitQueued) return;
+    snipEditFitQueued = true;
+    setTimeout(() => { snipEditFitQueued = false; snipEditFitActions(); }, 0);
+  }).observe(snipEditActionsBar);
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);
   $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor));

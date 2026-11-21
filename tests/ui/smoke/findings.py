@@ -1,5 +1,6 @@
 """Findings suite: the main-window probes generated from the review findings, each with its own boot."""
 from .arprobe import make_ar_probe
+from .harness import LANG_PRELOADS
 
 
 def run(browser, tmp):
@@ -2984,11 +2985,15 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       await baUndo();
       await baClick(70, 75);
       await nudge3('after undo and selecting again');
-      // the hint line sits below the image area and is always reserved
-      const hint = document.getElementById('snip-edit-nudge-hint').getBoundingClientRect();
+      // the hint takes no row of its own: it floats over the bottom edge of the image area and takes no click
+      const hintBox = document.getElementById('snip-edit-nudge-hint');
+      const hintTxt = hintBox.firstElementChild.getBoundingClientRect();
       const area = document.getElementById('snip-edit-canvas-wrap').getBoundingClientRect();
-      if (hint.height < 8) errs.push('x53: the hint has no reserved line (height ' + hint.height + ')');
-      if (hint.top < area.bottom - 0.5) errs.push('x53: the hint overlaps the image area (hint top ' + hint.top + ', area bottom ' + area.bottom + ')');
+      const barTop = document.getElementById('snip-edit-apply').parentElement.getBoundingClientRect().top;
+      if (hintBox.getBoundingClientRect().height > 0.5) errs.push('x53: the hint reserves a line of ' + hintBox.getBoundingClientRect().height + 'px');
+      if (Math.abs(area.bottom - barTop) > 1) errs.push('x53: a gap of ' + (barTop - area.bottom) + 'px between the image area and the bar');
+      if (hintTxt.bottom > area.bottom + 0.5 || hintTxt.top < area.top) errs.push('x53: the hint is not inside the image area (' + hintTxt.top + '..' + hintTxt.bottom + ' of ' + area.top + '..' + area.bottom + ')');
+      if (getComputedStyle(hintBox.firstElementChild).pointerEvents !== 'none' && getComputedStyle(hintBox).pointerEvents !== 'none') errs.push('x53: the hint takes clicks');
     }
 """)
     failed += ar_probe('gfsnip', 'screenshot editor: nudge target after a text move or handle grab, keys owned by a slider, the shape menu and a checkbox', 'index', '1000x780', '', ba_common + r"""
@@ -3074,4 +3079,32 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
     if (gh < 150) errs.push('xicon: the grid is only ' + Math.round(gh) + ' px high at icon size 300');
 """)
     # ---- main window findings: generated block end ----
+    # The bottom bar of the screenshot editor is one row down to the smallest window in every language, and nothing sits between the image area and it.
+    failed += ar_probe('bsnbar96', 'screenshot editor: one bottom row with Close on it and no gap above it at the minimum window size in every language', 'index', '680x460', ba_seed + LANG_PRELOADS, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('bsnbar96: the editor did not open'); }
+    else {
+      const core = await import('./core.js');
+      const wc = await import('./windowChrome.js');
+      const bar = document.getElementById('snip-edit-apply').parentElement;
+      const wrap = document.getElementById('snip-edit-canvas-wrap');
+      const ids = ['snip-edit-saveas-format', 'snip-edit-saveas', 'snip-edit-keep', 'snip-edit-retry', 'snip-edit-apply'];
+      for (const code of ['en', 'de', 'es', 'fr', 'it', 'pt', 'pl', 'zh', 'ja', 'nl', 'tr', 'ro']) {
+        await core.setLang(code);
+        wc.applyI18n();
+        await sleep(200);
+        const status = bar.querySelector('.snip-edit-status').getBoundingClientRect();
+        const rows = new Set();
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          if (getComputedStyle(el).display === 'none') { errs.push('bsnbar96 ' + code + ': ' + id + ' is not shown'); continue; }
+          const r = el.getBoundingClientRect();
+          if (r.top >= status.bottom - 1) rows.add(id);
+          if (r.width < 8 || r.right > innerWidth + 0.5) errs.push('bsnbar96 ' + code + ': ' + id + ' is outside the window or empty (' + Math.round(r.left) + '..' + Math.round(r.right) + ')');
+        }
+        if (rows.size) errs.push('bsnbar96 ' + code + ': wrapped onto a second row: ' + [...rows].join());
+        const gap = bar.getBoundingClientRect().top - wrap.getBoundingClientRect().bottom;
+        if (Math.abs(gap) > 1) errs.push('bsnbar96 ' + code + ': ' + gap.toFixed(1) + 'px between the image area and the bar');
+      }
+    }
+""")
     return failed

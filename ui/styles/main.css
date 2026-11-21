@@ -2313,18 +2313,23 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   z-index: 6;
   white-space: nowrap;
 }
-/* Its own line under the image area, always reserved: the hint never covers the image and
-   showing it on a selection never moves anything. */
+/* The hint floats over the bottom edge of the image area and takes no row of its own: a
+   reserved line left an empty strip above the bar whenever no hint showed. It never
+   takes a click (pointer-events), and showing it moves nothing. */
 .snip-edit-nudge-hint {
-  flex: 0 0 auto;
-  height: 28px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  position: relative;
+  z-index: 7;
+  flex: 0 0 0;
+  height: 0;
   pointer-events: none;
 }
 .snip-edit-nudge-hint > span {
-  margin: 0 12px;
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 24px);
   padding: 2px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -2345,6 +2350,13 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   border-top: 1px solid var(--border);
   background: var(--surface-2);
 }
+/* Save as, Keep and New screenshot are words while the row fits; the moment it would wrap
+   (snipEditFitActions sets .compact) they shrink to their icons, so Close stays on the row. */
+.snip-edit-act { display: inline-flex; align-items: center; justify-content: center; }
+.snip-edit-act-icon { display: none; }
+.snip-edit-actions.compact .snip-edit-act { padding: 6px 9px; }
+.snip-edit-actions.compact .snip-edit-act-icon { display: block; }
+.snip-edit-actions.compact .snip-edit-act-text { display: none; }
 /* Undo, redo and zoom sit at the left end of the bottom row. */
 .snip-edit-status { display: flex; align-items: center; gap: 2px; margin-right: auto; }
 #snip-edit .icon-btn:disabled,

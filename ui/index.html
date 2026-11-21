@@ -1400,9 +1400,18 @@
         <option value="webp" data-i18n="optScreenshotFormatWebp">WebP</option>
         <option value="bmp" data-i18n="optScreenshotFormatBmp">BMP</option>
       </select>
-      <button id="snip-edit-saveas" class="ghost-btn" type="button" data-i18n="screenshotSaveAs" data-i18n-title="snipEditSaveAsTip"></button>
-      <button id="snip-edit-keep" class="ghost-btn" type="button" data-i18n="snipKeepBtn"></button>
-      <button id="snip-edit-retry" class="ghost-btn" type="button" data-i18n="snipRetry"></button>
+      <button id="snip-edit-saveas" class="ghost-btn snip-edit-act" type="button" data-i18n-title="snipEditSaveAsTip" data-i18n-aria="screenshotSaveAs">
+        <svg class="snip-edit-act-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M5 19h14"/></svg>
+        <span class="snip-edit-act-text" data-i18n="screenshotSaveAs"></span>
+      </button>
+      <button id="snip-edit-keep" class="ghost-btn snip-edit-act" type="button" data-i18n-title="snipKeepBtn" data-i18n-aria="snipKeepBtn">
+        <svg class="snip-edit-act-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 8.5v7M8.5 12h7"/></svg>
+        <span class="snip-edit-act-text" data-i18n="snipKeepBtn"></span>
+      </button>
+      <button id="snip-edit-retry" class="ghost-btn snip-edit-act" type="button" data-i18n-title="snipRetry" data-i18n-aria="snipRetry">
+        <svg class="snip-edit-act-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 1 0 2.5-5.8M4 4v4.5h4.5"/></svg>
+        <span class="snip-edit-act-text" data-i18n="snipRetry"></span>
+      </button>
       <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="close" data-i18n-title="snipEditCloseTip" data-shortcut="snipCancel"></button>
     </div>
     <!-- SouthEast-only, same as the app needs elsewhere -- a full 8-handle

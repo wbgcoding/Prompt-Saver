@@ -852,8 +852,8 @@ SECTION = """\
           if (!hint395 || hint395.firstElementChild.classList.contains('hidden')) {
             out.errors.push('395: the nudge hint is not shown while a shape is selected');
           }
-          if (hint395 && hint395.offsetHeight < 8) {
-            out.errors.push('395: the nudge hint has no line of its own under the image');
+          if (hint395 && hint395.offsetHeight > 0) {
+            out.errors.push('395: the nudge hint reserves a line under the image');
           }
           // The handles are 10 CSS px squares in the handle layer: a move or a resize
           // shows as the shift of the handle's own left/top, read back in image pixels.
@@ -901,7 +901,7 @@ SECTION = """\
           if (countPaintedHandles() !== 0) {
             out.errors.push('395: Escape did not remove the selection handles');
           }
-          if (!hint395.firstElementChild.classList.contains('hidden') || hint395.offsetHeight < 8) {
+          if (!hint395.firstElementChild.classList.contains('hidden')) {
             out.errors.push('395: the nudge hint stayed visible after Escape deselected the shape');
           }
 
