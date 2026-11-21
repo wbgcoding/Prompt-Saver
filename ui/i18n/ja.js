@@ -229,6 +229,7 @@ export default {
     voiceMic: "マイク",
     voiceMicDefault: "Windows の既定",
     whisperModels: "Whisper モデル…",
+    whisperModelsTitle: "Whisper モデル",
     whisperModelBase: "ベース · 60 MB · 高速、古い PC 向け",
     whisperModelSmall: "スモール · 190 MB · 良好な精度、ほとんどの PC で動作",
     whisperModelTurbo: "ラージ ターボ · 574 MB · 最高の精度、高性能な PC が必要",

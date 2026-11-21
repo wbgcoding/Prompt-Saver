@@ -229,6 +229,7 @@ export default {
     voiceMic: "麦克风",
     voiceMicDefault: "Windows 默认",
     whisperModels: "Whisper 模型…",
+    whisperModelsTitle: "Whisper 模型",
     whisperModelBase: "基础 · 60 MB · 速度快，适合较旧的电脑",
     whisperModelSmall: "小型 · 190 MB · 准确度良好，大多数电脑都能运行",
     whisperModelTurbo: "Large Turbo · 574 MB · 准确度最高，需要高性能电脑",

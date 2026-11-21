@@ -229,6 +229,7 @@ export default {
     voiceMic: "Mikrofon",
     voiceMicDefault: "Windows varsayılanı",
     whisperModels: "Whisper modelleri…",
+    whisperModelsTitle: "Whisper modelleri",
     whisperModelBase: "Temel · 60 MB · hızlı, eski bilgisayarlar için",
     whisperModelSmall: "Küçük · 190 MB · iyi doğruluk, çoğu bilgisayarda çalışır",
     whisperModelTurbo: "Large Turbo · 574 MB · en iyi doğruluk, güçlü bir bilgisayar gerekir",

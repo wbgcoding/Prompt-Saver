@@ -229,6 +229,7 @@ export default {
     voiceMic: "Mikrofon",
     voiceMicDefault: "Domyślny w systemie Windows",
     whisperModels: "Modele Whisper…",
+    whisperModelsTitle: "Modele Whisper",
     whisperModelBase: "Podstawowy · 60 MB · szybki, dla starszych komputerów",
     whisperModelSmall: "Mały · 190 MB · dobra dokładność, działa na większości komputerów",
     whisperModelTurbo: "Large Turbo · 574 MB · najlepsza dokładność, wymaga mocnego komputera",
