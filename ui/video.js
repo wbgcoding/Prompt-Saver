@@ -19,7 +19,7 @@ import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { stripFormatExt } from "./exportName.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
-import { destPath, winPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
+import { destPath, winPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, requestExportCancel, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { markedRange, centeredRect, addAlignedCameraOverlay, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor, OV_X_SVG } from "./videoOverlays.js";
 import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
@@ -2103,7 +2103,7 @@ $("ve-export-start").addEventListener("click", () => startExport(false));
 $("ve-export-clip").addEventListener("click", () => startExport(true));
 // The Stop button only shows while an export runs (syncExportButton), so a click always means stop.
 function stopExport() {
-  if (VE.exporting) invoke("cancel_export").catch(() => {});
+  requestExportCancel();
 }
 $("ve-export-cancel").addEventListener("click", stopExport);
 $("ve-export-saveas").addEventListener("click", async () => {
@@ -2197,7 +2197,7 @@ async function closeWindowAsked(quit) {
       danger: false,
     });
     if (choice === false) { keepOpen(); return; }
-    if (choice === "alt") invoke("cancel_export").catch(() => {});
+    if (choice === "alt") requestExportCancel();
   } else if (VE.ops.length && VE.dirty) {
     await bringForward();
     const choice = await askUnsavedEdits();

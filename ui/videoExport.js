@@ -171,6 +171,16 @@ export function setProgress(pct) {
   $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
+// The backend can cancel an export only once it started one (after its own checks). A Stop
+// during the disk-space question, the clip temp name or the export-folder picker is therefore
+// recorded here, and startExport ends the run cleanly at its next step instead of starting it.
+let exportCancelRequested = false;
+export function requestExportCancel() {
+  if (!VE.exporting) return;
+  exportCancelRequested = true;
+  invoke("cancel_export").catch(() => {});
+}
+
 // toClipboard runs the same export into a throwaway temp file instead of the normal
 // destination, then puts that file on the clipboard (see clip_export_path/sweep_clip_export_temp
 // in the backend for where and when the temp file goes away).
@@ -185,10 +195,11 @@ export async function startExport(toClipboard) {
   const format = exportFormat();
   // Claimed before the first await, so a double click cannot start a second export.
   VE.exporting = true;
+  exportCancelRequested = false;
   let dest = toClipboard
     ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(errMessageLogged(err, t, "video")); return null; })
     : destPath();
-  if (!dest) { VE.exporting = false; return; }
+  if (!dest || exportCancelRequested) { VE.exporting = false; applyExportGate(); return; }
   // Another recording can be opened while this export still runs; its result
   // must never touch that recording's state.
   const gen = VE.loadGen;
@@ -211,6 +222,14 @@ export async function startExport(toClipboard) {
   // the user just chose in the export-folder dialog. A clipboard export never lands here: its
   // destination is always the app's temp folder.
   let destRetried = false;
+  // A Stop that arrived before the backend had an export to cancel: the run ends here as a
+  // cancel, not as a failure.
+  const stoppedBeforeStart = () => {
+    if (!exportCancelRequested) return false;
+    clearExportStatus();
+    $("ve-export-status").textContent = t("veExportCancelled");
+    return true;
+  };
   try {
     for (;;) {
       const request = {
@@ -249,6 +268,7 @@ export async function startExport(toClipboard) {
           if (!proceed) { clearExportStatus(); return; }
         }
       }
+      if (stoppedBeforeStart()) return;
       try {
         // The backend lands the file on a free name when the requested one is
         // taken, so everything after success refers to the path it returns.
@@ -291,6 +311,7 @@ export async function startExport(toClipboard) {
           const folder = await invoke("pick_export_folder").catch(() => null);
           // Another recording was opened while the picker was up: this export is over.
           if (!stillHere()) return;
+          if (stoppedBeforeStart()) return;
           if (!folder) {
             // Nothing was chosen (cancelled, or no dialog could open): the
             // export did not happen, and the status line says why.
