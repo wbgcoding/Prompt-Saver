@@ -1,0 +1,8 @@
+# Build settings for the speech engine (whisper.cpp), read by every cargo run in this folder.
+# The cmake crate strips optimization flags and leaves the MSVC Release config without /O2, which
+# makes the engine several times slower than real time; defining the flags here keeps them.
+# GGML_NATIVE=OFF keeps the binary free of the build machine's CPU features (AVX2 stays on).
+[env]
+CMAKE_C_FLAGS_RELEASE = "-O2 -Ob2 -DNDEBUG"
+CMAKE_CXX_FLAGS_RELEASE = "-O2 -Ob2 -DNDEBUG"
+GGML_NATIVE = "OFF"

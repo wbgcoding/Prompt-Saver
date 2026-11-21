@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo tree` for the Rust crates, `cargo metadata` for their licenses, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-219 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+224 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -193,6 +193,8 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | webview2-com | 0.39.1 | MIT |
 | webview2-com-sys | 0.39.1 | MIT |
 | weezl | 0.1.12 | MIT OR Apache-2.0 |
+| whisper-rs | 0.16.0 | Unlicense |
+| whisper-rs-sys | 0.15.0 | Unlicense |
 | winapi-util | 0.1.11 | Unlicense OR MIT |
 | window-vibrancy | 0.8.1 | Apache-2.0 OR MIT |
 | windows | 0.62.2 | MIT OR Apache-2.0 |
@@ -225,11 +227,17 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | PDFium | bblanchon/pdfium-binaries (pinned) | BSD-3-Clause |
 | SQLite | bundled via the rusqlite crate | Public Domain |
 | FFmpeg | 9.1 (gyan.dev essentials build) | GPL-3.0-or-later |
+| whisper.cpp | 1.8.3 (built in through the whisper-rs-sys crate) | MIT |
+| Whisper speech models | ggml conversions of OpenAI Whisper (base, small, large-v3-turbo; 5-bit) | MIT |
+| Silero VAD | v5.1.2 (ggml conversion) | MIT |
 
 ## Notes
 
 - **PDFium** (BSD-3-Clause): Compiled into the executable and unpacked to a temporary folder the first time a PDF preview is rendered. Source: https://github.com/bblanchon/pdfium-binaries
 - **SQLite** (Public Domain): https://www.sqlite.org/copyright.html
 - **FFmpeg** (GPL-3.0-or-later): Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe and ffprobe.exe directly, together with its license text (ffmpeg-LICENSE); the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.1. Corresponding source for this build: that release page links it; the upstream tag is https://github.com/FFmpeg/FFmpeg/tree/n9.1 and the source archive is https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz
+- **whisper.cpp** (MIT): Compiled into the executable as the local speech recognition engine (CPU only, no network). Source: https://github.com/ggml-org/whisper.cpp
+- **Whisper speech models** (MIT): Not part of the installer: downloaded only with your explicit consent, from https://huggingface.co/ggerganov/whisper.cpp, and checked against a pinned SHA-256 before use. Original models: https://github.com/openai/whisper
+- **Silero VAD** (MIT): Voice activity detection model used to cut silence before transcription. Downloaded only with your explicit consent, from https://huggingface.co/ggml-org/whisper-vad, and checked against a pinned SHA-256 before use. Original: https://github.com/snakers4/silero-vad
 
 The full text of every license named above is shown in the app itself (About > Third-party licenses, expand any entry) and is embedded in the executable at build time from `src-tauri/license-texts/`.

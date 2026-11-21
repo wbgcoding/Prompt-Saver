@@ -43,8 +43,8 @@ fn profile(physical: u32, ram_gb: u32, avx2: bool) -> SystemProfile {
 fn recommendation_table_covers_every_boundary() {
     let cases = [
         // (physical cores, GB, avx2, expected)
-        (16, 64, true, WHISPER_TURBO),
-        (8, 16, true, WHISPER_TURBO),
+        (16, 64, true, WHISPER_SMALL),
+        (8, 16, true, WHISPER_SMALL),
         (8, 15, true, WHISPER_SMALL),
         (7, 16, true, WHISPER_SMALL),
         (7, 64, true, WHISPER_SMALL),
@@ -62,6 +62,17 @@ fn recommendation_table_covers_every_boundary() {
     ];
     for (cores, ram, avx2, want) in cases {
         assert_eq!(recommend(&profile(cores, ram, avx2)), want, "{cores} cores, {ram} GB, avx2 {avx2}");
+    }
+}
+
+#[test]
+fn the_slowest_model_is_never_recommended() {
+    for cores in [0, 4, 8, 20, 64] {
+        for ram in [0, 8, 16, 128] {
+            for avx2 in [false, true] {
+                assert_ne!(recommend(&profile(cores, ram, avx2)), WHISPER_TURBO);
+            }
+        }
     }
 }
 
@@ -188,7 +199,7 @@ fn catalog_marks_only_complete_files_as_downloaded() {
     fs::write(dir.join(format!("{}.part", base.asset.file)), b"x").unwrap();
     let cat = build_catalog(Some(&dir), profile(8, 16, true));
     assert!(cat.models.iter().all(|m| !m.downloaded));
-    assert_eq!(cat.recommended, WHISPER_TURBO);
+    assert_eq!(cat.recommended, WHISPER_SMALL);
     assert_eq!(cat.profile, profile(8, 16, true));
     assert!(!cat.vad_downloaded);
     assert!(!any_model_downloaded(&dir));

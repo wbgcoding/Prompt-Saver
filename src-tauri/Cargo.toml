@@ -123,6 +123,14 @@ windows-capture = "=2.0.1"
 # warning. Used only to answer the camera window's getUserMedia permission
 # prompt in Rust; WebView2 blocks the request forever otherwise.
 webview2-com = "=0.39.1"
+# Local speech recognition: whisper.cpp compiled in (CPU only). Its build needs CMake and, to
+# generate the bindings, libclang (LIBCLANG_PATH, set by build.bat). The compiler flags it needs
+# live in .cargo/config.toml.
+whisper-rs = { version = "=0.16.0", optional = true }
+
+[features]
+default = ["whisper"]
+whisper = ["dep:whisper-rs"]
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.

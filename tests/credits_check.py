@@ -18,6 +18,8 @@ or bundles from outside needs a row:
   - PDFium: the DLL compiled in with include_bytes!
   - SQLite: rusqlite built with its "bundled" feature
   - FFmpeg: ffmpeg.exe in the installer resources or the consented download
+  - whisper.cpp: the whisper-rs crate linked in
+  - Whisper models and Silero VAD: the consented model downloads in the sources
   - every bundle resource and every embedded .dll/.exe must belong to a row
 """
 import json
@@ -96,6 +98,9 @@ def main():
         "PDFium": bool(re.search(r'include_bytes!\("[^"]*pdfium\.dll"\)', sources)),
         "SQLite": bool(re.search(r'^rusqlite\s*=.*"bundled"', cargo_toml, re.M)) and "rusqlite" in crates,
         "FFmpeg": "ffmpeg.exe" in resources or "codexffmpeg/releases/download" in sources,
+        "whisper.cpp": bool(re.search(r'^whisper-rs\s*=.*optional', cargo_toml, re.M)) and "whisper-rs" in crates,
+        "Whisper speech models": "huggingface.co/ggerganov/whisper.cpp/resolve" in sources,
+        "Silero VAD": "huggingface.co/ggml-org/whisper-vad/resolve" in sources,
     }
     for name in sorted(manual):
         if name not in proofs:

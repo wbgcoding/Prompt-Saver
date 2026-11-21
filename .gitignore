@@ -62,3 +62,6 @@ coverage/
 *.user
 .signing/
 .DS_Store
+
+# Machine-local cargo settings (libclang path)
+/.cargo/

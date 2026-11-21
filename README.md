@@ -171,6 +171,8 @@ PDF previews are rendered by PDFium, which is compiled into the exe. Download
 `pdfium.dll` (x64) from [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases)
 and put it in `src-tauri/` before building, since the build fails without it.
 
+Local speech recognition is whisper.cpp compiled into the exe. Its bindings need libclang: set `LIBCLANG_PATH` to the folder holding `libclang.dll` (an LLVM install's `bin`), and have CMake on the PATH (Visual Studio ships it).
+
 Video export/conversion shells out to ffmpeg, which the installer ships as a
 plain file rather than compiling in. Download the gyan.dev "essentials" build
 (currently pinned to release

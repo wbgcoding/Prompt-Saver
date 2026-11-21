@@ -81,6 +81,19 @@ if errorlevel 1 (
     goto :fail
 )
 
+rem The speech engine's bindings are generated with libclang. LIBCLANG_PATH names the folder holding
+rem libclang.dll; when it is unset the shared tools copy is used if it is there.
+if not defined LIBCLANG_PATH if exist "E:\Claude\.Tools\libclang\bin\libclang.dll" set "LIBCLANG_PATH=E:\Claude\.Tools\libclang\bin"
+if not defined LIBCLANG_PATH (
+    echo [ERROR] LIBCLANG_PATH is not set. Point it at the folder containing libclang.dll
+    echo [ERROR] ^(an LLVM bin folder or a libclang wheel's native folder^) and build again.
+    goto :fail
+)
+if not exist "%LIBCLANG_PATH%\libclang.dll" (
+    echo [ERROR] LIBCLANG_PATH is set to "%LIBCLANG_PATH%" but libclang.dll is not there.
+    goto :fail
+)
+
 if not exist "node_modules\" (
     echo [INFO] node_modules missing - running npm install...
     call npm install

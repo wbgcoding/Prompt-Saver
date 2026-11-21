@@ -203,15 +203,14 @@ pub(crate) fn system_profile() -> SystemProfile {
     })
 }
 
-// The model that suits a PC. Provisional thresholds, to be replaced by the measured speed of
-// each model per core count: a PC without AVX2, with fewer than 4 physical cores or less than
-// 8 GB memory gets the smallest model; 8 or more physical cores and 16 GB or more the largest;
-// everything between the middle one.
+// The model that suits a PC, from measured speed (seconds of work per second of audio, host
+// with 20 physical cores): base 0.07 at 10 threads and 0.10 at 4; small 0.20 at 10 and 0.32 to
+// 0.37 at 4; large-v3-turbo about 1.0 at 10 and 1.6 to 2.0 at 4, so no PC reaches a comfortable
+// speed with it and it is offered but never recommended. Small is therefore the pick from 4
+// physical cores and 8 GB memory with AVX2; anything weaker gets base.
 pub(crate) fn recommend(p: &SystemProfile) -> &'static str {
     if !p.avx2 || p.physical_cores < 4 || p.ram_gb < 8 {
         WHISPER_BASE
-    } else if p.physical_cores >= 8 && p.ram_gb >= 16 {
-        WHISPER_TURBO
     } else {
         WHISPER_SMALL
     }

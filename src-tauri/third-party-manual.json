@@ -19,5 +19,26 @@
     "license": "GPL-3.0-or-later",
     "licenseId": "GPL-3.0-or-later",
     "note": "Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe and ffprobe.exe directly, together with its license text (ffmpeg-LICENSE); the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.1. Corresponding source for this build: that release page links it; the upstream tag is https://github.com/FFmpeg/FFmpeg/tree/n9.1 and the source archive is https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz"
+  },
+  {
+    "name": "whisper.cpp",
+    "version": "1.8.3 (built in through the whisper-rs-sys crate)",
+    "license": "MIT",
+    "licenseId": "MIT",
+    "note": "Compiled into the executable as the local speech recognition engine (CPU only, no network). Source: https://github.com/ggml-org/whisper.cpp"
+  },
+  {
+    "name": "Whisper speech models",
+    "version": "ggml conversions of OpenAI Whisper (base, small, large-v3-turbo; 5-bit)",
+    "license": "MIT",
+    "licenseId": "MIT",
+    "note": "Not part of the installer: downloaded only with your explicit consent, from https://huggingface.co/ggerganov/whisper.cpp, and checked against a pinned SHA-256 before use. Original models: https://github.com/openai/whisper"
+  },
+  {
+    "name": "Silero VAD",
+    "version": "v5.1.2 (ggml conversion)",
+    "license": "MIT",
+    "licenseId": "MIT",
+    "note": "Voice activity detection model used to cut silence before transcription. Downloaded only with your explicit consent, from https://huggingface.co/ggml-org/whisper-vad, and checked against a pinned SHA-256 before use. Original: https://github.com/snakers4/silero-vad"
   }
 ]
