@@ -89,6 +89,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Typed text stays put.** Saving a new prompt from dropped text, a text recognition result, the
+  clipboard history or an empty grid cell no longer empties the text you were typing in the main window.
 - **Tray menu on several screens.** With screens at different scaling, the tray menu could open
   too large and drawn at the wrong size; it now always matches the screen it opens on.
 - **Video editor after a fresh install.** The installer now also ships ffprobe, so recordings

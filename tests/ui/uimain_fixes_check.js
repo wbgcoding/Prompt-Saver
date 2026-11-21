@@ -81,6 +81,11 @@ section(() => {
   check(inputEl.value, "half typed", "the composer keeps its text");
   ctx.api.startCreate();
   check(opened[1]?.text, "half typed", "no argument still reads the composer");
+  check(opened.map((o) => o.fromComposer), [false, true], "only the composer's own text is marked as taken from it");
+  // Saving a create dialog empties the composer only when the dialog took the composer's text.
+  const confirm = extractBlock(src, "export async function confirmModal(");
+  check(/if \(modalState\.fromComposer\) \{\s*inputEl\.value = "";/.test(confirm), true, "the save clears the composer only for its own text");
+  check(/\n\s{6}inputEl\.value = "";/.test(confirm.replace(/if \(modalState\.fromComposer\) \{[^}]*\}/, "")), false, "no unconditional composer clear is left");
   const drop = extractBlock(src, "export function setupDragDrop(");
   check(/confirmDiscardOrProceed\(\(\) => startCreate\(text\)\)/.test(drop), true, "the drop handler passes the text");
   check(/inputEl\.value = text/.test(drop), false, "the drop handler no longer writes the composer");

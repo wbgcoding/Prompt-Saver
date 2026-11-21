@@ -370,12 +370,14 @@ export function disarmDraftAutosave() {
   draftLastSaved = null;
 }
 
-export function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, secret = false, locked = false, title, targetCell }) {
+export function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, secret = false, locked = false, title, targetCell, fromComposer = false }) {
   modalSession++;
   modalOpener = document.activeElement;
   varsRevealed = false;
   assignModalState({
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
+    // Only a dialog that took its text from the composer empties the composer on save.
+    fromComposer,
     // What the editor opened with. Save compares against it and only sends an image field when the
     // picture really changed, so a save can never clear a stored image just by not having it to hand.
     imageOpened: image,
@@ -1353,7 +1355,7 @@ export function startCreate(dropped) {
   if (!text) return;
   // Carry the composed text into the dialog so it can be reviewed/edited (and
   // previewed as Markdown) before saving.
-  openModal({ mode: "create", text, title: t("nameModalTitle") });
+  openModal({ mode: "create", text, title: t("nameModalTitle"), fromComposer: typeof dropped !== "string" });
 }
 
 export async function confirmModal() {
@@ -1427,9 +1429,11 @@ export async function confirmModal() {
       if (!text) { if (!rotating) focusModalText(); return; }
       // A recreated confidential entry is sealed by the backend before its first write.
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto, secret: modalState.reSecret ? true : undefined });
-      inputEl.value = "";
-      autoGrow(inputEl);
-      saveBtn.disabled = true;
+      if (modalState.fromComposer) {
+        inputEl.value = "";
+        autoGrow(inputEl);
+        saveBtn.disabled = true;
+      }
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
       saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "", rotateAuto: false });
