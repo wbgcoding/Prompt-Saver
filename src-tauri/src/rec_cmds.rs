@@ -552,16 +552,16 @@ pub(crate) async fn finish_and_continue_recording(
                         let spawned = std::thread::Builder::new().name("rec-continue-crop".into()).spawn(move || {
                             let _ = crop_recording_blocking(&ffmpeg, &crop_path, rect, move || cancel_flag2.load(Ordering::SeqCst), |_| {});
                             let me = std::thread::current().id();
-                            REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(_, h)| h.thread().id() != me);
+                            REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(_, h, _)| h.thread().id() != me);
                         });
                         match spawned {
                             Ok(handle) => {
                                 // The thread removes its own entry when it ends, possibly before this push, so finished
                                 // handles are dropped here.
                                 let mut crops = REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner());
-                                crops.retain(|(_, h)| !h.is_finished());
+                                crops.retain(|(_, h, _)| !h.is_finished());
                                 if !handle.is_finished() {
-                                    crops.push((cancel_flag, handle));
+                                    crops.push((cancel_flag, handle, path.to_string_lossy().to_string()));
                                 }
                             }
                             Err(_) => append_crash_log("recording: could not start the interim-part crop thread"),
@@ -758,14 +758,21 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     Ok(payload)
 }
 
-pub(crate) type InterimCrops = Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>;
+pub(crate) type InterimCrops = Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>, String)>;
 
-/// Signals and joins every running interim crop. The list is moved into a local
-/// first and the lock released: a crop thread's last step takes the same lock
-/// to remove its own entry, so joining while holding it would never return.
-pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<InterimCrops>) {
-    let running = std::mem::take(&mut *crops.lock().unwrap_or_else(|e| e.into_inner()));
-    for (flag, handle) in running {
+/// Signals and joins the running interim crops of the given part files (the current take's).
+/// Crops of other parts, such as an earlier take still waiting for a decision, keep running.
+/// The matching entries are moved into a local first and the lock released: a crop thread's
+/// last step takes the same lock to remove its own entry, so joining while holding it would
+/// never return.
+pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<InterimCrops>, parts: &[String]) {
+    let running = {
+        let mut guard = crops.lock().unwrap_or_else(|e| e.into_inner());
+        let (mine, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut *guard).into_iter().partition(|(_, _, p)| parts.contains(p));
+        *guard = rest;
+        mine
+    };
+    for (flag, handle, _) in running {
         flag.store(true, Ordering::SeqCst);
         let _ = handle.join();
     }
@@ -778,7 +785,7 @@ pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<InterimCrops>) {
 pub(crate) fn wait_for_interim_crops(crops: &Mutex<InterimCrops>, timeout: std::time::Duration) -> bool {
     let deadline = std::time::Instant::now() + timeout;
     loop {
-        if crops.lock().unwrap_or_else(|e| e.into_inner()).iter().all(|(_, h)| h.is_finished()) {
+        if crops.lock().unwrap_or_else(|e| e.into_inner()).iter().all(|(_, h, _)| h.is_finished()) {
             return true;
         }
         if std::time::Instant::now() >= deadline {
@@ -827,10 +834,14 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
         // A cancel discards the whole take: every part a "finish and continue" chain closed goes
         // too. Interim crops still running are signalled and joined first so the delete cannot
         // race an ffmpeg process still reading the file.
-        stop_and_join_interim_crops(&REC_INTERIM_CROPS);
-        // Best-effort from here: a missing file (already moved/deleted by the
-        // user) is not a reason to fail an otherwise-successful cancel.
-        for part in std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner())) {
+        // Only this take's own parts: an earlier take's crops belong to parts that still wait in
+        // the result list and must come out cropped.
+        let parts = std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()));
+        let part_paths: Vec<String> = parts.iter().map(|p| p.path.clone()).collect();
+        stop_and_join_interim_crops(&REC_INTERIM_CROPS, &part_paths);
+        // Best-effort from here: a missing file (already moved/deleted by the user) is not a
+        // reason to fail an otherwise-successful cancel.
+        for part in parts {
             remove_recording_part_files(&part, &trash_root);
         }
         Ok(())

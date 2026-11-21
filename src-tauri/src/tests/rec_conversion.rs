@@ -779,13 +779,13 @@ fn cancelling_interim_crops_does_not_deadlock_on_their_own_list_lock() {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         let me = std::thread::current().id();
-        list2.lock().unwrap().retain(|(_, h)| h.thread().id() != me);
+        list2.lock().unwrap().retain(|(_, h, _)| h.thread().id() != me);
     });
-    list.lock().unwrap().push((flag, handle));
+    list.lock().unwrap().push((flag, handle, "take-b-part1.mp4".to_string()));
     let (tx, rx) = std::sync::mpsc::channel();
     let list3 = list.clone();
     std::thread::spawn(move || {
-        stop_and_join_interim_crops(&list3);
+        stop_and_join_interim_crops(&list3, &["take-b-part1.mp4".to_string()]);
         let _ = tx.send(());
     });
     assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "joining the crops hung");
@@ -855,7 +855,7 @@ fn waiting_for_interim_crops_returns_only_after_them_and_never_cancels() {
     let list: Mutex<InterimCrops> = Mutex::new(Vec::new());
     assert!(wait_for_interim_crops(&list, Duration::from_millis(10)), "an empty list is done at once");
     let handle = std::thread::spawn(|| std::thread::sleep(Duration::from_millis(300)));
-    list.lock().unwrap().push((flag.clone(), handle));
+    list.lock().unwrap().push((flag.clone(), handle, "a.mp4".to_string()));
     assert!(!wait_for_interim_crops(&list, Duration::from_millis(20)), "a running crop outlasts a short wait");
     assert!(wait_for_interim_crops(&list, Duration::from_secs(5)), "the wait ends once the crop did");
     assert!(!flag.load(Ordering::SeqCst), "waiting never signals a cancel");
@@ -885,4 +885,39 @@ fn continue_closes_the_old_part_key_capture_before_the_next_part_starts() {
     let stop = body.find("keylog::maybe_stop_and_write(&path)").unwrap();
     let start = body.find("match start_part(").unwrap();
     assert!(stop < start, "the old part's sidecar is written before start_part runs");
+}
+
+#[test]
+fn cancelling_a_take_stops_only_its_own_interim_crops() {
+    let list: Arc<Mutex<InterimCrops>> = Arc::new(Mutex::new(Vec::new()));
+    let mut flags = Vec::new();
+    // Two crops of an earlier take (parts still waiting for a decision) and one of the current take.
+    for part in ["take-a-part1.mp4", "take-a-part2.mp4", "take-b-part1.mp4"] {
+        let flag = Arc::new(AtomicBool::new(false));
+        let (flag2, list2) = (flag.clone(), list.clone());
+        let handle = std::thread::spawn(move || {
+            // A crop ends on a cancel or on its own after a while; it then drops its own entry.
+            let started = std::time::Instant::now();
+            while !flag2.load(Ordering::SeqCst) && started.elapsed() < std::time::Duration::from_millis(400) {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            let me = std::thread::current().id();
+            list2.lock().unwrap().retain(|(_, h, _)| h.thread().id() != me);
+        });
+        flags.push((part, flag.clone()));
+        list.lock().unwrap().push((flag, handle, part.to_string()));
+    }
+    stop_and_join_interim_crops(&list, &["take-b-part1.mp4".to_string()]);
+    let cancelled: Vec<(&str, bool)> = flags.iter().map(|(p, f)| (*p, f.load(Ordering::SeqCst))).collect();
+    assert_eq!(cancelled, vec![("take-a-part1.mp4", false), ("take-a-part2.mp4", false), ("take-b-part1.mp4", true)], "only the current take's crop is signalled");
+    assert_eq!(list.lock().unwrap().len(), 2, "the earlier take's crops stay listed");
+    assert!(wait_for_interim_crops(&list, std::time::Duration::from_secs(5)));
+}
+
+#[test]
+fn cancel_recording_hands_the_current_take_parts_to_the_crop_cancel() {
+    let src = source!("../rec_cmds.rs");
+    let body = &src[src.find("pub(crate) async fn cancel_recording").unwrap()..];
+    let body = &body[..body.find("rearm_hotkeys(&app);").unwrap()];
+    assert!(body.contains("stop_and_join_interim_crops(&REC_INTERIM_CROPS, &part_paths)"), "a cancel names the parts of its own take");
 }
