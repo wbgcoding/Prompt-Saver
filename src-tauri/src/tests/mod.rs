@@ -60,6 +60,7 @@ mod util_helpers_2;
 mod util_helpers_3;
 mod whisper;
 mod whisper_engine;
+mod whisper_eval;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;

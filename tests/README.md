@@ -6,6 +6,11 @@ installed. Run the whole list after any UI change: `python tests/run_all.py` run
 command of the table below (`--quick` leaves out the slow browser walks, `--filter <text>`
 picks commands) and prints one line per suite plus the tail of each failure.
 
+One ignored case measures the local speech recognition on real speech (`whisper_eval`): put the pinned
+model files in `<dir>/models` and pairs `<name>.wav` + `<name>.txt` (names starting with `de` or `en`) in
+`<dir>/clips`, then run `WHISPER_EVAL_DIR=<dir> cargo test --lib whisper_eval -- --ignored --nocapture`
+(add `--release` for a usable speed). It prints the word error rate per model and language and needs no network.
+
 `cargo test` and `cargo clippy` create `src-tauri/target/debug/` (~4 GB). Delete it as
 soon as the run has been evaluated; only `target/release/` ships.
 
