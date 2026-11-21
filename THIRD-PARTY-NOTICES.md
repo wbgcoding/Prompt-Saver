@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo tree` for the Rust crates, `cargo metadata` for their licenses, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-218 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+219 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -30,6 +30,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | clipboard-win | 5.4.3 | BSL-1.0 |
 | cmov | 0.5.4 | Apache-2.0 OR MIT |
 | color_quant | 1.1.0 | MIT |
+| constant_time_eq | 0.6.1 | CC0-1.0 OR MIT-0 OR Apache-2.0 |
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
 | crc32fast | 1.5.3 | MIT OR Apache-2.0 |
@@ -54,7 +55,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | fallible-streaming-iterator | 0.1.9 | MIT/Apache-2.0 |
 | fax | 0.2.7 | MIT |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 |
-| flate2 | 1.1.10 | MIT OR Apache-2.0 |
+| flate2 | 1.1.11 | MIT OR Apache-2.0 |
 | fnv | 1.0.7 | Apache-2.0 / MIT |
 | foldhash | 0.2.0 | Zlib |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |
@@ -217,7 +218,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | zeroize | 1.9.1 | Apache-2.0 OR MIT |
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
-| zip | 9.3.0 | MIT |
+| zip | 9.5.1 | MIT |
 | zmij | 1.0.23 | MIT |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
