@@ -98,6 +98,7 @@ if exist "src-tauri\icons\android" rmdir /s /q "src-tauri\icons\android"
 if exist "src-tauri\icons\ios" rmdir /s /q "src-tauri\icons\ios"
 if exist "src-tauri\icons\icon.icns" del /q "src-tauri\icons\icon.icns"
 del /q "src-tauri\icons\Square*.png" 2>nul
+del /q "src-tauri\icons\128x128?2x.png" 2>nul
 del /q "src-tauri\icons\StoreLogo.png" 2>nul
 del /q "src-tauri\icons\64x64.png" 2>nul
 

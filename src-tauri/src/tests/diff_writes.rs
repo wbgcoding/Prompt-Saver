@@ -579,7 +579,7 @@ fn strip_user_path_lines_replaces_the_path_but_keeps_the_line() {
     let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-test-{}", std::process::id()));
     let contents = "\
 [t=1 v1.0] a clean line with no path in it at all\n\
-[t=2 v1.0] panicked at C:\\Users\\example\\.cargo\\registry\\src\\index.crates.io\\somecrate-1.2.3\\src\\lib.rs:42\n\
+[t=2 v1.0] panicked at C:\\Users\\Public\\example\\.cargo\\registry\\src\\index.crates.io\\somecrate-1.2.3\\src\\lib.rs:42\n\
 [t=3 v1.0] another clean line, describing an ordinary failure\n";
     fs::write(&path, contents).unwrap();
 
@@ -620,7 +620,7 @@ fn strip_user_path_lines_still_scrubs_other_lines_past_one_invalid_utf8_byte() {
     let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-badutf8-{}", std::process::id()));
     let mut contents = Vec::new();
     contents.extend_from_slice(b"[t=1 v1.0] broken byte follows: \xFF end of line\n");
-    contents.extend_from_slice(b"[t=2 v1.0] panicked at C:\\Users\\example\\lib.rs:42");
+    contents.extend_from_slice(b"[t=2 v1.0] panicked at C:\\Users\\Public\\example\\lib.rs:42");
     contents.push(b'\n');
     fs::write(&path, &contents).unwrap();
 

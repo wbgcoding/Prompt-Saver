@@ -791,7 +791,7 @@ fn an_older_txt_export_with_trailing_metadata_still_imports() {
 #[test]
 fn strip_user_path_lines_keeps_a_line_appended_while_it_waits_for_the_lock() {
     let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-race-{}", std::process::id()));
-    fs::write(&path, "[t=1 v1.0] panicked at C:\\Users\\example\\lib.rs:42\n").unwrap();
+    fs::write(&path, "[t=1 v1.0] panicked at C:\\Users\\Public\\example\\lib.rs:42\n").unwrap();
     let held = CrashLogLock::acquire(&path);
     let worker = {
         let path = path.clone();

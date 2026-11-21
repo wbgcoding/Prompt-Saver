@@ -134,7 +134,7 @@ fn ps_single_quote_doubles_embedded_quotes() {
     assert_eq!(ps_single_quote(""), "''");
     assert_eq!(ps_single_quote("it's"), "'it''s'");
     assert_eq!(ps_single_quote("''"), "''''''");
-    assert_eq!(ps_single_quote("C:\\Users\\M\u{fc}ller\\a b"), "'C:\\Users\\M\u{fc}ller\\a b'");
+    assert_eq!(ps_single_quote("C:\\Users\\Public\\M\u{fc}ller\\a b"), "'C:\\Users\\Public\\M\u{fc}ller\\a b'");
 }
 
 #[test]

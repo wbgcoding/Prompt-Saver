@@ -85,8 +85,8 @@ async function main() {
   check("a code is matched whole", S.pasteFailText("no-target-found", txt), "");
 
   // ---- file URI
-  check("a drive path", S.fileUri("C:\\Users\\a\\x.png"), "file:///C:/Users/a/x.png");
-  check("a space is encoded", S.fileUri("C:\\Users\\a b\\x.png"), "file:///C:/Users/a%20b/x.png");
+  check("a drive path", S.fileUri("C:\\Users\\Public\\a\\x.png"), "file:///C:/Users/Public/a/x.png");
+  check("a space is encoded", S.fileUri("C:\\Users\\Public\\a b\\x.png"), "file:///C:/Users/Public/a%20b/x.png");
   check("a network path keeps two slashes", S.fileUri("\\\\server\\share\\f.png"), "file://server/share/f.png");
   check("? and # cannot start a query or fragment", S.fileUri("C:\\a#b?c.png"), "file:///C:/a%23b%3Fc.png");
   check("a percent sign is encoded", S.fileUri("C:\\100%.png"), "file:///C:/100%25.png");

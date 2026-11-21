@@ -51,7 +51,7 @@ fn replace_case_insensitive_keeps_multibyte_text_around_an_ascii_needle_intact()
 
 #[test]
 fn looks_like_a_path_accepts_drive_unc_and_unix_roots_with_something_below() {
-    for s in [r"D:\x", "D:/x", r"c:\Users\a", r"\\srv\share", r"\\srv", "/mnt/data", "/a/b/c", "/a/"] {
+    for s in [r"D:\x", "D:/x", r"c:\Users\Public\a", r"\\srv\share", r"\\srv", "/mnt/data", "/a/b/c", "/a/"] {
         assert!(looks_like_a_path(s), "{s:?}");
     }
 }

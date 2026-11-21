@@ -66,7 +66,7 @@ const check = (label, actual, expected) => {
 };
 
 // ---- ffPath
-check("ffPath plain drive path", api.ffPath("C:\\Users\\a\\clip.mp4"), String.raw`C\:/Users/a/clip.mp4`);
+check("ffPath plain drive path", api.ffPath("C:\\Users\\Public\\a\\clip.mp4"), String.raw`C\:/Users/Public/a/clip.mp4`);
 check("ffPath keeps blanks", api.ffPath("D:\\My Clips\\a b.mp4"), String.raw`D\:/My Clips/a b.mp4`);
 check("ffPath apostrophe closes, escapes and reopens the quote", api.ffPath("C:\\it's.mp4"), String.raw`C\:/it'\\\''s.mp4`);
 check("ffPath two apostrophes", api.ffPath("a'b'c"), String.raw`a'\\\''b'\\\''c`);
