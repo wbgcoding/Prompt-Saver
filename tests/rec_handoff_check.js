@@ -94,6 +94,40 @@ function sandbox(over) {
     const discard = src.match(/invoke\("discard_recording_parts"[^)]*\)/);
     check("discard names the take", !!discard && discard[0].includes("take"), true);
   }
+  {
+    // A new take arrives while the "discard after copy" question is open: confirming it must not
+    // close the dialog or discard anything of the new take (the old one was already kept).
+    let answer;
+    const el = () => ({ classList: { add() {}, remove() {} }, pause() {}, removeAttribute() {}, load() {} });
+    const sb = {
+      calls: [], toasts: [],
+      pendingRecPath: "C:/rec/first.mp4", recTakeKey: "C:/rec/first-last.mp4",
+      recSavedOrAttached: false, recCopiedNotSaved: true, recGen: 3, recLateOutput: "",
+      recWork: Promise.resolve(), recProgressOff: null,
+      recModal: el(), recPreview: el(), recStatus: { classList: { remove() {} }, onclick: null },
+      confirmDialog: () => new Promise((r) => { answer = r; }),
+      invoke: async (cmd, args) => { sb.calls.push([cmd, args && (args.path || args.take)]); return null; },
+      closeRecMorePop() {}, setPendingRec(p) { sb.pendingRecPath = p; },
+      toast: (m) => sb.toasts.push(m), t: (k) => k,
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("async function closeRecModal() {"), sb);
+    const done = sb.closeRecModal();
+    await Promise.resolve();
+    sb.pendingRecPath = "C:/rec/second.mp4";
+    sb.recTakeKey = "C:/rec/second-last.mp4";
+    answer(true);
+    await done;
+    check("new take during the close question: nothing discarded", sb.calls, []);
+    check("new take during the close question: dialog stays on the new take", sb.pendingRecPath, "C:/rec/second.mp4");
+    // Same question with no new take: the close goes ahead and discards that take.
+    sb.calls = []; sb.recCopiedNotSaved = true;
+    const again = sb.closeRecModal();
+    await Promise.resolve();
+    answer(true);
+    await again;
+    check("confirmed close without a new take discards it", sb.calls.filter(([c]) => c.startsWith("discard")).map((c) => c[1]), ["C:/rec/second.mp4", "C:/rec/second-last.mp4"]);
+  }
   for (const p of problems) console.log("FAIL", p);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
   process.exit(problems.length ? 1 : 0);

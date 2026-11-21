@@ -371,6 +371,7 @@ export function bindCapture() {
   // "throw this away", so they share one path.
   async function closeRecModal() {
     const path = pendingRecPath;
+    const askedTake = recTakeKey;
     const shouldDelete = !recSavedOrAttached;
     // Copy alone does not count as saving, but it moved the file to where the clipboard reference
     // points; closing unconfirmed would delete that file under the live reference. Ask before
@@ -383,6 +384,9 @@ export function bindCapture() {
         cancelLabel: t("cancel"),
       });
       if (!ok) return;
+      // A new recording that arrived while the question was open already kept this take and now
+      // owns the dialog: the answer was about the old take, so the new one is left alone.
+      if (pendingRecPath !== path || recTakeKey !== askedTake) return;
     }
     recGen += 1;
     recLateOutput = "";

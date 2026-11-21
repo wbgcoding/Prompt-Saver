@@ -89,6 +89,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Recording finished during a question.** A recording that finishes while the "discard after
+  copy" question is open is no longer closed and partly thrown away when you answer it.
 - **Typed text stays put.** Saving a new prompt from dropped text, a text recognition result, the
   clipboard history or an empty grid cell no longer empties the text you were typing in the main window.
 - **Tray menu on several screens.** With screens at different scaling, the tray menu could open
