@@ -1485,7 +1485,7 @@ export default {
     errDemoJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en schakel daarna de demomodus om.",
     errDemoFolderForeign: "Naast je gegevens staat al een map met de naam prompt-saver-demo die niet door de demomodus is gemaakt. Hernoem of verwijder de map en probeer het opnieuw.",
     errUpdatePortableManual: "Dit is de draagbare versie. De releasepagina is geopend: download de nieuwe draagbare exe en vervang deze.",
-    errUpdateAdminManual: "Prompt Saver is voor alle gebruikers geïnstalleerd, dus alleen een beheerder kan het bijwerken. De releasepagina is geopend: voer de nieuwe setup uit als beheerder.",
+    errUpdateAdminManual: "{app} is voor alle gebruikers geïnstalleerd, dus alleen een beheerder kan het bijwerken. De releasepagina is geopend: voer de nieuwe setup uit als beheerder.",
     errExportProgramFile: "Dat bestand hoort bij het programma en kan geen exportdoel zijn.",
     errBackupTooLarge: "Deze back-up is groter dan 512 MB en is niet hersteld",
     errStoreTooLargeForBackup: "De gegevensopslag is groter dan 512 MB en kan niet worden geback-upt",

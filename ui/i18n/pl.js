@@ -1485,7 +1485,7 @@ export default {
     errDemoJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem przełącz tryb demo.",
     errDemoFolderForeign: "Obok Twoich danych istnieje już folder o nazwie prompt-saver-demo, który nie został utworzony przez tryb demo. Zmień jego nazwę lub usuń go i spróbuj ponownie.",
     errUpdatePortableManual: "To wersja przenośna. Strona wydania jest otwarta: pobierz nowy przenośny plik exe i zastąp nim ten.",
-    errUpdateAdminManual: "Prompt Saver jest zainstalowany dla wszystkich użytkowników, więc tylko administrator może go zaktualizować. Strona wydania jest otwarta: uruchom nowy instalator jako administrator.",
+    errUpdateAdminManual: "{app} jest zainstalowany dla wszystkich użytkowników, więc tylko administrator może go zaktualizować. Strona wydania jest otwarta: uruchom nowy instalator jako administrator.",
     errExportProgramFile: "Ten plik należy do programu i nie może być celem eksportu.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",
     errStoreTooLargeForBackup: "Magazyn danych przekracza 512 MB i nie można wykonać kopii zapasowej",

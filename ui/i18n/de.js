@@ -1492,7 +1492,7 @@ export default {
     errDemoJobsRunning: "Hintergrundaufgaben laufen noch. Warte, bis sie fertig sind, und wechsle dann den Vorführmodus.",
     errDemoFolderForeign: "Neben deinen Daten gibt es schon einen Ordner namens prompt-saver-demo, den der Vorführmodus nicht angelegt hat. Benenne ihn um oder entferne ihn und versuche es dann noch einmal.",
     errUpdatePortableManual: "Das ist die portable Version. Die Release-Seite ist geöffnet: Lade die neue portable Exe herunter und ersetze diese.",
-    errUpdateAdminManual: "Prompt Saver ist für alle Benutzer installiert, daher kann nur ein Administrator es aktualisieren. Die Release-Seite ist geöffnet: Führe das neue Setup als Administrator aus.",
+    errUpdateAdminManual: "{app} ist für alle Benutzer installiert, daher kann nur ein Administrator es aktualisieren. Die Release-Seite ist geöffnet: Führe das neue Setup als Administrator aus.",
     errExportProgramFile: "Diese Datei gehört zur App und kann kein Exportziel sein.",
     errBackupTooLarge: "Diese Sicherung ist größer als 512 MB und wurde nicht wiederhergestellt",
     errStoreTooLargeForBackup: "Der Datenspeicher ist größer als 512 MB und kann nicht gesichert werden",
