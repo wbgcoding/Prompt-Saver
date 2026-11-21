@@ -568,7 +568,7 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
 // standard account, or an admin with UAC off), so Administrators membership tells them
 // apart. `false` does not rule out elevation: a standard account's credential prompt still
 // takes a different administrator's password (see `elevation_denied_by_policy`).
-fn account_can_elevate() -> bool {
+pub(crate) fn account_can_elevate() -> bool {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Security::{
         GetTokenInformation, TokenElevationType, TOKEN_ELEVATION_TYPE, TOKEN_QUERY,

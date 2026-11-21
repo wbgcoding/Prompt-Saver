@@ -1492,6 +1492,7 @@ export default {
     errDemoJobsRunning: "Background jobs are still running. Let them finish, then switch demo mode.",
     errDemoFolderForeign: "A folder named prompt-saver-demo already exists next to your data and was not created by demo mode. Rename or remove it, then try again.",
     errUpdatePortableManual: "This is the portable version. The release page is open: download the new portable exe and replace this one.",
+    errUpdateAdminManual: "Prompt Saver is installed for all users, so only an administrator can update it. The release page is open: run the new setup as administrator.",
     errExportProgramFile: "That file belongs to the app and cannot be an export target.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",
     errStoreTooLargeForBackup: "The data store is larger than 512 MB and cannot be backed up",

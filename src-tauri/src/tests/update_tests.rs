@@ -33,6 +33,27 @@ fn only_a_microsoft_signature_passes_the_bootstrapper_gate() {
     }
 }
 
+// A standard account in front of an install for all users cannot run the silent setup: it would
+// install a second copy into its own profile. Every other combination updates as before.
+#[test]
+fn only_a_standard_account_in_front_of_an_all_users_install_updates_by_hand() {
+    assert!(update_needs_admin_by_hand(false, false));
+    assert!(!update_needs_admin_by_hand(true, false), "an administrator confirms the setup's prompt");
+    assert!(!update_needs_admin_by_hand(false, true), "a per-user install is writable");
+    assert!(!update_needs_admin_by_hand(true, true));
+    // The test binary's own folder is writable and the probe leaves nothing behind.
+    assert!(exe_dir_writable());
+    let dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    let left = std::fs::read_dir(&dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().contains("-write-probe-"));
+    assert!(!left, "the write probe removes its file");
+    // The check runs before anything is downloaded, and the UI has a text for its answer.
+    let src = include_str!("../update.rs");
+    let at = src.find("pub(crate) async fn install_update").unwrap();
+    let body = &src[at..];
+    assert!(body.find("update_needs_admin_by_hand(").unwrap() < body.find("install_update_blocking(").unwrap());
+    assert!(include_str!("../../../ui/errors.js").contains("\"admin-update-manual\": \"errUpdateAdminManual\""));
+}
+
 #[test]
 fn update_waits_for_a_recording_or_a_running_job() {
     assert_eq!(update_blocker(true, false, 0), Some("recording-active"));

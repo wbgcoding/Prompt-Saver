@@ -89,6 +89,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Updates on a standard account.** When Prompt Saver is installed for all users, a standard
+  account no longer installs a second copy when it updates: the release page opens so the new
+  setup can be run as administrator.
 - **Statistics after a restore.** Restoring a backup made before any copy was counted no longer
   leaves the 7-day, 30-day and 12-month periods empty although the restored history has copies.
 - **Recording finished during a question.** A recording that finishes while the "discard after

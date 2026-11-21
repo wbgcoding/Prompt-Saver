@@ -1485,6 +1485,7 @@ export default {
     errDemoJobsRunning: "Ainda há tarefas em segundo plano. Aguarde o término e depois alterne o modo demo.",
     errDemoFolderForeign: "Já existe uma pasta chamada prompt-saver-demo ao lado dos seus dados que não foi criada pelo modo demo. Renomeie ou exclua a pasta e tente novamente.",
     errUpdatePortableManual: "Esta é a versão portátil. A página da versão está aberta: baixe o novo exe portátil e substitua este.",
+    errUpdateAdminManual: "O Prompt Saver está instalado para todos os usuários, então só um administrador pode atualizá-lo. A página da versão está aberta: execute o novo instalador como administrador.",
     errExportProgramFile: "Esse arquivo pertence ao programa e não pode ser um destino de exportação.",
     errBackupTooLarge: "Este backup ultrapassa 512 MB e não foi restaurado",
     errStoreTooLargeForBackup: "O armazenamento de dados ultrapassa 512 MB e não pode ser copiado",

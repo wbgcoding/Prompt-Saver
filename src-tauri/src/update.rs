@@ -716,6 +716,28 @@ pub(crate) fn update_blocker(recording: bool, switching: bool, jobs: usize) -> O
     }
 }
 
+// The silent update can only replace this copy when the folder it sits in is writable, or when
+// the account can confirm the setup's elevation prompt itself (an administrator).
+pub(crate) fn update_needs_admin_by_hand(can_elevate: bool, dir_writable: bool) -> bool {
+    !can_elevate && !dir_writable
+}
+
+// Whether this process may create a file beside its own exe, probed with a uniquely named file
+// that is removed at once. An unknown exe path counts as writable, so a failed probe never
+// blocks an update that would have worked.
+pub(crate) fn exe_dir_writable() -> bool {
+    let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) else { return true };
+    let probe = dir.join(format!(".{}-write-probe-{}", brand::SLUG, std::process::id()));
+    match fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(f) => {
+            drop(f);
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(e) => e.kind() != std::io::ErrorKind::PermissionDenied,
+    }
+}
+
 // `update_blocker` over the live recording and job state.
 fn update_blocker_now(app: &AppHandle) -> Option<&'static str> {
     update_blocker(recording_active(app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count())
@@ -732,6 +754,16 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
         let page = release_page_for(&url).ok_or_else(|| "invalid update source".to_string())?;
         std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe")).arg(page).spawn().map_err(|e| e.to_string())?;
         return Err("portable-update-manual".to_string());
+    }
+    // An install for all users lives where only an administrator may write. A standard account
+    // starts the silent setup unelevated, which then installs a second copy into its own profile
+    // and restarts this old one, offering the same update again for ever. The release page
+    // opens instead, so the setup can be run as administrator.
+    #[cfg(windows)]
+    if update_needs_admin_by_hand(crate::ocr::account_can_elevate(), exe_dir_writable()) {
+        let page = release_page_for(&url).ok_or_else(|| "invalid update source".to_string())?;
+        std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe")).arg(page).spawn().map_err(|e| e.to_string())?;
+        return Err("admin-update-manual".to_string());
     }
     if let Some(why) = update_blocker_now(&app) {
         return Err(why.to_string());

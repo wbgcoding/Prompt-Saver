@@ -1485,6 +1485,7 @@ export default {
     errDemoJobsRunning: "バックグラウンド処理がまだ実行中です。完了してからデモモードを切り替えてください。",
     errDemoFolderForeign: "データの隣に prompt-saver-demo という名前のフォルダーが既にあり、デモモードで作成されたものではありません。名前を変更するか削除してから、もう一度お試しください。",
     errUpdatePortableManual: "これはポータブル版です。リリースページを開きました。新しいポータブル版の exe をダウンロードして、この exe と置き換えてください。",
+    errUpdateAdminManual: "Prompt Saver はすべてのユーザー向けにインストールされているため、更新できるのは管理者だけです。リリースページを開きました。新しいセットアップを管理者として実行してください。",
     errExportProgramFile: "このファイルはプログラムの一部のため、書き出し先にできません。",
     errBackupTooLarge: "このバックアップは512MBを超えるため復元されませんでした",
     errStoreTooLargeForBackup: "データストアが512MBを超えているため、バックアップできません",

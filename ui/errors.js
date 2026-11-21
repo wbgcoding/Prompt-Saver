@@ -38,6 +38,7 @@ export const ERROR_MSG_KEYS = {
   "dir-not-picked": "syncDirNotApplied",
   "recording-busy": "recBusy",
   "portable-update-manual": "errUpdatePortableManual",
+  "admin-update-manual": "errUpdateAdminManual",
   "recording-active": "errUpdateRecordingActive",
   "source-not-allowed": "errSourceNotAllowed",
   "editor-busy": "errVideoEditorBusy",

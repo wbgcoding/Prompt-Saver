@@ -197,10 +197,12 @@ export function bindAbout() {
       await invoke("install_update", { url: updateInfo.url }); // app exits
     } catch (err) {
       updateModal.install.disabled = false;
-      // A portable copy is not an error: the release page opened instead.
-      if (String(err) === "portable-update-manual") {
+      // A portable copy, or an install for all users on a standard account, is not an error:
+      // the release page opened instead.
+      const manual = { "portable-update-manual": "errUpdatePortableManual", "admin-update-manual": "errUpdateAdminManual" }[String(err)];
+      if (manual) {
         closeUpdateModal();
-        toast(t("errUpdatePortableManual"));
+        toast(t(manual));
         return;
       }
       errToast(err);

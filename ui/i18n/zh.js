@@ -1485,6 +1485,7 @@ export default {
     errDemoJobsRunning: "后台任务仍在运行。请等它们完成后再切换演示模式。",
     errDemoFolderForeign: "数据旁已有一个名为 prompt-saver-demo 的文件夹，它不是演示模式创建的。请重命名或删除该文件夹，然后重试。",
     errUpdatePortableManual: "这是便携版。已打开发布页面：请下载新的便携版 exe 并替换当前文件。",
+    errUpdateAdminManual: "Prompt Saver 是为所有用户安装的，因此只有管理员才能更新。已打开发布页面：请以管理员身份运行新的安装程序。",
     errExportProgramFile: "该文件属于程序本身，不能作为导出目标。",
     errBackupTooLarge: "此备份超过 512 MB，未能恢复",
     errStoreTooLargeForBackup: "数据存储超过 512 MB，无法备份",

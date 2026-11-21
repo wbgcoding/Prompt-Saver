@@ -1485,6 +1485,7 @@ export default {
     errDemoJobsRunning: "Arka plan işleri hâlâ çalışıyor. Bitmelerini bekleyin, sonra demo modunu değiştirin.",
     errDemoFolderForeign: "Verilerinizin yanında prompt-saver-demo adında, demo modunun oluşturmadığı bir klasör zaten var. Klasörü yeniden adlandırın veya silin, sonra tekrar deneyin.",
     errUpdatePortableManual: "Bu taşınabilir sürümdür. Sürüm sayfası açıldı: yeni taşınabilir exe dosyasını indirin ve bunun yerine koyun.",
+    errUpdateAdminManual: "Prompt Saver tüm kullanıcılar için yüklendiğinden yalnızca bir yönetici güncelleyebilir. Sürüm sayfası açıldı: yeni kurulumu yönetici olarak çalıştırın.",
     errExportProgramFile: "Bu dosya programa aittir ve dışa aktarma hedefi olamaz.",
     errBackupTooLarge: "Bu yedek 512 MB'tan büyük olduğu için geri yüklenmedi",
     errStoreTooLargeForBackup: "Veri deposu 512 MB'tan büyük olduğu için yedeklenemiyor",
