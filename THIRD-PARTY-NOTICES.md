@@ -178,7 +178,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
 | untrusted | 0.9.0 | ISC |
-| ureq | 3.5.1 | MIT OR Apache-2.0 |
+| ureq | 3.5.2 | MIT OR Apache-2.0 |
 | ureq-proto | 0.7.1 | MIT OR Apache-2.0 |
 | url | 2.5.8 | MIT OR Apache-2.0 |
 | urlpattern | 0.6.0 | MIT |

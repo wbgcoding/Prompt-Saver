@@ -35,7 +35,7 @@ serde_json = "=1.0.154"
 arboard = "=3.7.0"
 rfd = "=0.17.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
-ureq = { version = "=3.5.1", default-features = false, features = ["rustls"] }
+ureq = { version = "=3.5.2", default-features = false, features = ["rustls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 # Ed25519 check of signed updates; already in the tree through rustls.
 ring = "=0.17.14"
