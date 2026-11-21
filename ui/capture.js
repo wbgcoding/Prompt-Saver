@@ -344,8 +344,7 @@ export function bindCapture() {
   let recTakeKey = "";
   // The earlier parts of a "finish and continue" take go where the last file
   // went; the toast names only what really got saved.
-  async function keepRecParts(besideSaveAs) {
-    const take = recTakeKey;
+  async function keepRecParts(besideSaveAs, take = recTakeKey) {
     try {
       const [saved, failed] = await invoke("save_recording_parts", { besideSaveAs, take });
       if (saved > 0) toast(t("recContinuePartsSaved").replace("{n}", String(saved)));
@@ -496,14 +495,25 @@ export function bindCapture() {
   // take's path and orphan the file. The old take is saved like a plain Save instead (no
   // attach), after its running crop or conversion finished for that very file.
   let recHandoff = Promise.resolve();
+  // Save, Save as, Copy and Edit of the open dialog while they run: a new result waits for them
+  // instead of seeing a half-moved take.
+  const recActions = new Set();
+  function trackRecAction(work) {
+    const p = work.catch(() => {});
+    recActions.add(p);
+    p.then(() => recActions.delete(p));
+    return p;
+  }
   async function keepUndecidedRecording() {
     const undecided = () => !recModal.classList.contains("hidden") && pendingRecPath && !recSavedOrAttached;
     if (!undecided()) return;
     const gen = recGen;
     await recWork.catch(() => {});
-    // The user may have decided meanwhile (closed, saved, attached) or another action is moving
-    // the file right now: then that action owns the take.
-    if (gen !== recGen || !undecided() || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
+    // A Save, Save as, Copy or Edit still running owns the file until it ends; its outcome
+    // (saved, picker cancelled, failed) decides whether the take is still undecided.
+    while (recActions.size) await Promise.all([...recActions]);
+    // The user may have decided meanwhile (closed, saved, attached): then that decision owns it.
+    if (gen !== recGen || !undecided()) return;
     try {
       await invoke("save_recording_now", { srcPath: pendingRecPath });
       recSavedOrAttached = true;
@@ -663,20 +673,24 @@ export function bindCapture() {
   // Opening the editor hands the raw file to another window that owns it from then on. Treat
   // this like Save/Attach so closing the modal never deletes a file the editor is reading, and
   // close it at once so no Save/Save as/Copy here can move the file out from under the editor.
-  $("rec-modal-edit").addEventListener("click", async () => {
+  async function editRecTake() {
     if (!pendingRecPath || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
+    const gen = recGen, take = recTakeKey;
     try {
       const taken = await openVideoEditor({ srcPath: pendingRecPath });
       // The open editor kept its unsaved work: this take stays here to decide on.
       if (taken === false) return;
       recordToolUsage("video_editor");
+      // A newer take owns the dialog now: only the edited take's own parts are finished.
+      if (gen !== recGen) { await keepRecParts(false, take); return; }
       recSavedOrAttached = true;
       keepRecParts(false);
       closeRecModal();
     } catch (err) {
       errToast(err);
     }
-  });
+  }
+  $("rec-modal-edit").addEventListener("click", () => trackRecAction(editRecTake()));
   recFolderChangeBtn.addEventListener("click", async () => {
     await EXPERT_PATHS.recordingDir.change();
     renderRecFolder();
@@ -690,11 +704,19 @@ export function bindCapture() {
     if (!recPreview.classList.contains("hidden")) recPreview.src = convertFileSrc(newPath);
   }
   let recSaveBusy = false;
-  $("rec-modal-save").addEventListener("click", async () => {
+  // Save, Save as and Copy read the dialog's take before awaiting; a new take opening meanwhile
+  // owns the dialog afterwards, so the late result finishes only the take it started with.
+  async function saveRecNow() {
     if (!pendingRecPath || recSaveBusy) return;
     recSaveBusy = true;
+    const gen = recGen, take = recTakeKey;
     try {
       const newPath = await invoke("save_recording_now", { srcPath: pendingRecPath });
+      if (gen !== recGen) {
+        toast(t("recSaved"));
+        await keepRecParts(false, take);
+        return;
+      }
       adoptRecPath(newPath);
       recSavedOrAttached = true;
       toast(t("recSaved"));
@@ -704,14 +726,18 @@ export function bindCapture() {
     } finally {
       recSaveBusy = false;
     }
-  });
+  }
+  $("rec-modal-save").addEventListener("click", () => trackRecAction(saveRecNow()));
   let recSaveAsBusy = false;
-  $("rec-modal-saveas").addEventListener("click", async () => {
+  async function saveRecAs() {
     if (!pendingRecPath || recSaveAsBusy) return;
     recSaveAsBusy = true;
+    const gen = recGen, take = recTakeKey;
     try {
       const newPath = await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => { errToast(err); return null; });
-      if (newPath) {
+      if (newPath && gen !== recGen) {
+        await keepRecParts(true, take);
+      } else if (newPath) {
         adoptRecPath(newPath);
         recSavedOrAttached = true;
         await keepRecParts(true);
@@ -719,16 +745,20 @@ export function bindCapture() {
     } finally {
       recSaveAsBusy = false;
     }
-  });
+  }
+  $("rec-modal-saveas").addEventListener("click", () => trackRecAction(saveRecAs()));
   let recCopyBusy = false;
-  $("rec-modal-copy").addEventListener("click", async () => {
+  async function copyRecToClipboard() {
     if (!pendingRecPath || recCopyBusy) return;
     recCopyBusy = true;
+    const gen = recGen;
     try {
       // The file is relocated before the backend attempts the clipboard write, so the new path is
       // adopted whether or not the write succeeded; otherwise this window would point at a path
       // that no longer exists.
       const [newPath, clipOk] = await invoke("copy_recording_to_clipboard", { srcPath: pendingRecPath });
+      // A newer take owns the dialog: the copied file is not its path and not its state.
+      if (gen !== recGen) return;
       adoptRecPath(newPath);
       if (clipOk) {
         recCopiedNotSaved = !recSavedOrAttached;
@@ -741,7 +771,8 @@ export function bindCapture() {
     } finally {
       recCopyBusy = false;
     }
-  });
+  }
+  $("rec-modal-copy").addEventListener("click", () => trackRecAction(copyRecToClipboard()));
   $("rec-modal-yes").addEventListener("click", () => {
     const path = pendingRecPath;
     // Reuses the path a picked or dropped video already takes. Attaching counts as saving: mark

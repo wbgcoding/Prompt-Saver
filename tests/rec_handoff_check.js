@@ -28,7 +28,7 @@ function sandbox(over) {
     calls: [], toasts: [], errs: [],
     recModal: { classList: { contains: () => sb.hidden } }, hidden: false,
     pendingRecPath: "C:/rec/first.mp4", recSavedOrAttached: false, recGen: 3,
-    recWork: Promise.resolve(), recSaveBusy: false, recSaveAsBusy: false, recCopyBusy: false,
+    recWork: Promise.resolve(), recActions: new Set(),
     recTakeKey: "C:/rec/first-last.mp4", partCalls: [],
     invoke: async (cmd, args) => {
       if (cmd === "save_recording_parts") { sb.partCalls.push(args); return [2, 0]; }
@@ -38,7 +38,7 @@ function sandbox(over) {
     toast: (m) => sb.toasts.push(m), errToast: (e) => sb.errs.push(String(e)), t: (k) => k,
   }, over || {});
   vm.createContext(sb);
-  vm.runInContext("var recHandoff = Promise.resolve();" + extractBlock("async function keepRecParts(besideSaveAs) {") + extractBlock("async function keepUndecidedRecording() {"), sb);
+  vm.runInContext("var recHandoff = Promise.resolve();" + extractBlock("async function keepRecParts(besideSaveAs, take = recTakeKey) {") + extractBlock("async function keepUndecidedRecording() {"), sb);
   return sb;
 }
 
@@ -89,8 +89,8 @@ function sandbox(over) {
     // and a parts save reads the key when it starts (a later swap cannot redirect it).
     const m = src.match(/const mine = recHandoff[\s\S]*?await keepUndecidedRecording\(\);([\s\S]*?)recWork = openRecModal/);
     check("result handler sets the new take key after the handoff", !!m && /recTakeKey = path;/.test(m[1]), true);
-    const keep = extractBlock("async function keepRecParts(besideSaveAs) {");
-    check("parts save reads the key before awaiting", /const take = recTakeKey;[\s\S]*await invoke\("save_recording_parts", \{ besideSaveAs, take \}\)/.test(keep), true);
+    const keep = extractBlock("async function keepRecParts(besideSaveAs, take = recTakeKey) {");
+    check("parts save takes the key as an argument that defaults to the current one", /await invoke\("save_recording_parts", \{ besideSaveAs, take \}\)/.test(keep), true);
     const discard = src.match(/invoke\("discard_recording_parts"[^)]*\)/);
     check("discard names the take", !!discard && discard[0].includes("take"), true);
   }
@@ -127,6 +127,78 @@ function sandbox(over) {
     answer(true);
     await again;
     check("confirmed close without a new take discards it", sb.calls.filter(([c]) => c.startsWith("discard")).map((c) => c[1]), ["C:/rec/second.mp4", "C:/rec/second-last.mp4"]);
+  }
+  {
+    // Save / Save as / Edit still running when the next take opens its dialog: the new take is
+    // never adopted into, marked by or closed by the old action; only the old take's own parts
+    // are finished.
+    const handlers = (over) => {
+      const sb = Object.assign({
+        pendingRecPath: "C:/rec/a.mp4", recSavedOrAttached: false, recGen: 3, recTakeKey: "A-last",
+        recSaveBusy: false, recSaveAsBusy: false, recCopyBusy: false, recCopiedNotSaved: false,
+        partCalls: [], adopted: [], toasts: [], errs: [], closed: 0, gate: null,
+        adoptRecPath: (p) => sb.adopted.push(p), recordToolUsage() {}, closeRecModal: () => { sb.closed++; },
+        openVideoEditor: () => sb.gate,
+        invoke: async (cmd, args) => {
+          if (cmd === "save_recording_parts") { sb.partCalls.push(args); return [1, 0]; }
+          if (cmd === "copy_recording_to_clipboard") { await sb.gate; return ["C:/rec/a-copy.mp4", true]; }
+          await sb.gate;
+          return "C:/saved/a.mp4";
+        },
+        toast: (m) => sb.toasts.push(m), errToast: (e) => sb.errs.push(String(e)), t: (k) => k,
+      }, over || {});
+      vm.createContext(sb);
+      vm.runInContext(extractBlock("async function keepRecParts(besideSaveAs, take = recTakeKey) {") + extractBlock("async function saveRecNow() {") + extractBlock("async function saveRecAs() {") + extractBlock("async function editRecTake() {") + extractBlock("async function copyRecToClipboard() {"), sb);
+      return sb;
+    };
+    const swap = (sb) => { sb.recGen = 4; sb.recTakeKey = "B-last"; sb.pendingRecPath = "C:/rec/b.mp4"; };
+    for (const [name, fn, besideSaveAs, edit] of [["Save", "saveRecNow", false], ["Save as", "saveRecAs", true], ["Edit", "editRecTake", false, true]]) {
+      let release;
+      const sb = handlers({ gate: new Promise((r) => { release = r; }) });
+      if (edit) sb.gate = sb.gate.then(() => true);
+      const done = sb[fn]();
+      await Promise.resolve();
+      swap(sb);
+      release();
+      await done;
+      check(name + " superseded: new take's path not adopted", sb.adopted, []);
+      check(name + " superseded: new take not marked decided", sb.recSavedOrAttached, false);
+      check(name + " superseded: new take's dialog not closed", sb.closed, 0);
+      check(name + " superseded: only the old take's parts are finished", sb.partCalls, [{ besideSaveAs, take: "A-last" }]);
+    }
+    {
+      let release;
+      const sb = handlers({ gate: new Promise((r) => { release = r; }) });
+      const done = sb.copyRecToClipboard();
+      await Promise.resolve();
+      swap(sb);
+      release();
+      await done;
+      check("Copy superseded: new take's path not replaced", [sb.adopted, sb.recCopiedNotSaved], [[], false]);
+    }
+    {
+      const sb = handlers({ gate: Promise.resolve() });
+      await sb.saveRecNow();
+      check("Save without a new take: adopted, marked, parts of its own take", [sb.adopted, sb.recSavedOrAttached, sb.partCalls], [["C:/saved/a.mp4"], true, [{ besideSaveAs: false, take: "A-last" }]]);
+    }
+  }
+  {
+    // A new result arriving during Save as waits for the picker: a cancelled picker leaves the
+    // take undecided and it is then saved like a plain Save; a finished Save leaves it alone.
+    for (const outcome of ["cancelled", "saved"]) {
+      let finish;
+      const sb = sandbox();
+      const running = new Promise((r) => { finish = r; });
+      sb.recActions.add(running);
+      running.then(() => sb.recActions.delete(running));
+      const done = sb.keepUndecidedRecording();
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      check(outcome + ": waits for the running action", sb.calls, []);
+      if (outcome === "saved") sb.recSavedOrAttached = true;
+      finish();
+      await done;
+      check(outcome + " picker", sb.calls, outcome === "saved" ? [] : [["save_recording_now", "C:/rec/first.mp4"]]);
+    }
   }
   for (const p of problems) console.log("FAIL", p);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
