@@ -27,7 +27,6 @@ import { bgOpsPop, closeBgOpsPop, wireBgOps } from "./bgOps.js";
 import { bindTour, openTour, wireTour } from "./tour.js";
 import { bindGlobalSearch, closeGlobalSearch } from "./globalSearch.js";
 import { bindCapture, wireCapture } from "./capture.js";
-import { fitComposerTools } from "./composerTools.js";
 import { bindGridMenus, closeCtx, closeMoveToFolderPop, closeToolbarMenu, closeViewsPop, moveToFolderPop, toolbarMenu, viewsPop, wireGridMenus } from "./gridMenus.js";
 primeLang("en", EN);
 
@@ -54,7 +53,7 @@ wireColorPop();
 wireViews();
 
 wireTiles();
-window.addEventListener("resize", () => { applyIconZoom(); fitComposerTools(); });
+window.addEventListener("resize", () => { applyIconZoom(); autoGrow(inputEl); });
 
 wireGridFolders();
 

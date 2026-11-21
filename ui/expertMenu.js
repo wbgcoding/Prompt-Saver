@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignPrompts, assignSettings, COLORS, debounced, DEFAULT_COLORS, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, showActiveTab, syncEdgeFade, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, autoGrow, assignPrompts, assignSettings, COLORS, debounced, DEFAULT_COLORS, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, inputEl, invoke, LANG, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, showActiveTab, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -19,7 +19,6 @@ import { varFixedListRow } from "./editor.js";
 import { openScreenshotManager, openVideoCleanup } from "./recordingTools.js";
 import { i18nHit, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit, flashSettingsRow, openSettingsDirectoryEntry } from "./settingsSearch.js";
 import { EXPERT_NOTICES, noticeRow, noticeActionRow, actionRow } from "./expertNotices.js";
-import { fitComposerTools } from "./composerTools.js";
 
 export let expertResetTimer = null;
 
@@ -233,7 +232,7 @@ export function applyFlags() {
   // Not a setting: a runtime fact from voice_support(). A Windows build
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
-  fitComposerTools(); // a flag flip shows or hides composer tool buttons
+  autoGrow(inputEl); // a flag flip shows or hides composer tool buttons
   refreshCustomThemes(); // The feature may have just been switched on or off
   // Flags that change .tile-name metrics via CSS have no apply* path, so a cached fit size from
   // before the toggle would linger until fitCache's own eviction. (The tile style refits itself

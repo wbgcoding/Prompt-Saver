@@ -3,7 +3,7 @@
 // and degrades safely for odd inputs.
 // Run:  node tests/composer_stack_check.js      Exit: 0 = clean, 1 = problems.
 const path = require("path");
-const { composerToolCols } = require(path.join(__dirname, "..", "ui", "composerTools.js"));
+const { composerColChoices, composerToolCols, pickComposerCols } = require(path.join(__dirname, "..", "ui", "composerTools.js"));
 
 const problems = [];
 const check = (label, actual, expected) => {
@@ -38,6 +38,42 @@ for (let v = 1; v <= 6; v++) {
     if (rows * cols - v >= cols) problems.push(`empty row for h=${h} v=${v}: ${rows}x${cols}`);
   }
 }
+
+// Column choices, fewest first.
+check("choices for 6", composerColChoices(6), [1, 2, 3, 6]);
+check("choices for 4", composerColChoices(4), [1, 2, 4]);
+check("choices for 0", composerColChoices(0), [1]);
+
+// The text box height depends on the column count: stacking widens the box, so the same
+// text needs fewer lines. Model: a text of `chars` characters in a box whose line holds
+// 40 characters at 6 columns, 52 at 3, 58 at 2, 64 at 1; 19 px per line plus 22 px frame.
+const PER_LINE = { 6: 40, 3: 52, 2: 58, 1: 64 };
+const heightFor = (chars) => (cols) => Math.min(160, 22 + 19 * Math.max(1, Math.ceil(chars / PER_LINE[cols])));
+// Short text: one row of buttons.
+check("short text keeps one row", pickComposerCols(6, heightFor(30)), 6);
+// 90 characters: 3 lines (79 px) at 6 columns, but only 2 lines (60 px) at 3 columns.
+// Stacking would shrink the box below its rows, so the row stays (the old rule flipped here).
+check("borderline text stays one row", pickComposerCols(6, heightFor(90)), 6);
+// 110 characters: 3 lines even at 3 columns, so the stack holds.
+check("longer text stacks", pickComposerCols(6, heightFor(110)), 3);
+// Typing one character at a time never makes the column count go back up.
+let prevCols = 6;
+for (let n = 1; n <= 600; n++) {
+  const cols = pickComposerCols(6, heightFor(n));
+  if (cols > prevCols) problems.push(`typing char ${n} went back from ${prevCols} to ${cols} columns`);
+  prevCols = cols;
+}
+// The old rule (columns from the height at the current layout) on the same model flips;
+// this pins the model so the check above cannot pass on a model that never flips.
+let cur = 6, flips = 0;
+for (let n = 80; n <= 110; n++) {
+  const next = composerToolCols(heightFor(n)(cur), 6);
+  if (next !== cur) flips++;
+  const back = composerToolCols(heightFor(n)(next), 6);
+  if (back !== next) flips++;
+  cur = back;
+}
+if (flips === 0) problems.push("model never flips under the old rule: the typing check proves nothing");
 
 if (problems.length) {
   console.error("composer_stack_check FAILED:\n" + problems.join("\n"));

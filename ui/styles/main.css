@@ -3418,7 +3418,12 @@ select.modal-input { padding-right: 30px; }
   opacity: 0; pointer-events: none; cursor: pointer;
   transition: opacity var(--transition), color var(--transition), background var(--transition);
 }
-.clear-wrap-ta .clear-btn { top: 9px; transform: none; }
+/* A text box X sits on the first line: centred on a one-line box (1px border + 10px
+   padding + half the 19px line = 20.5px, minus half the 24px button). */
+.clear-wrap-ta .clear-btn { top: 8.5px; transform: none; }
+/* The composer text box carries the icon zoom; its X follows it, or a raised icon
+   scale leaves the X small and above the middle of the taller box. */
+.composer .clear-wrap-ta > .clear-btn { zoom: var(--icon-zoom, 1); }
 .clear-btn.show { opacity: 0.55; pointer-events: auto; }
 .clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
 /* A hotkey field has a placeholder, so the X shows exactly while a shortcut is set,

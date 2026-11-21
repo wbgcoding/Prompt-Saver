@@ -643,12 +643,18 @@ export async function confirmIfNoUndo(opts) {
   return !!(await confirmDialog(opts));
 }
 
-export function autoGrow(el) {
+function fitHeight(el) {
   el.style.height = "auto";
   const target = el.scrollHeight + 2;
   el.style.height = `${Math.min(target, INPUT_MAX)}px`;
   el.style.overflowY = target > INPUT_MAX ? "auto" : "hidden";
-  if (el === inputEl) fitComposerTools(); // the composer's tool buttons follow the input height
+}
+
+// Fits a text box to its text. The composer's tool buttons stack beside a tall input and
+// change its width, so for that box the button layout and the height are settled together.
+export function autoGrow(el) {
+  if (el === inputEl && fitComposerTools(fitHeight)) return;
+  fitHeight(el);
 }
 
 export const cellKey = (c, r) => `${c},${r}`;

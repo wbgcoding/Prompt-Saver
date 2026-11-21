@@ -14,20 +14,61 @@ export function composerToolCols(inputHeight, visible) {
   return Math.ceil(visible / rows);
 }
 
+// Pure: the column counts the grid can take for `visible` buttons, fewest first.
+export function composerColChoices(visible) {
+  if (!(visible > 0)) return [1];
+  const out = new Set();
+  for (let rows = visible; rows >= 1; rows--) out.add(Math.ceil(visible / rows));
+  return [...out].sort((a, b) => a - b);
+}
+
+// Pure: the column count to use when the text box height depends on it. Stacking the
+// buttons widens the text box, a wider box needs fewer lines, and a shorter box asks for
+// fewer rows again; deciding on the height measured at the current layout therefore
+// flips back and forth with every typed character near a line break. Instead each
+// choice is judged on the height the text would have WITH that choice
+// (`heightAt(cols)`), and the most stacked choice whose own height still holds its rows
+// wins. More text only ever means more stacking, so typing never makes the grid jump
+// back and forth.
+export function pickComposerCols(visible, heightAt) {
+  const choices = composerColChoices(visible);
+  for (const cols of choices) {
+    if (composerToolCols(heightAt(cols), visible) <= cols) return cols;
+  }
+  return choices[choices.length - 1];
+}
+
 let lastCols = 0;
 
-// Reads the input's rendered height and the visible buttons, then sets --tool-cols on
-// the tools block, touching the DOM only when the column count changed.
-export function fitComposerTools() {
-  const tools = document.querySelector(".composer-tools");
-  const input = document.getElementById("input");
-  if (!tools || !input || !input.offsetHeight) return; // composer hidden: nothing to measure
+function visibleTools(tools) {
   let visible = 0;
   for (const b of tools.children) {
     if (!b.hidden && getComputedStyle(b).display !== "none") visible++;
   }
-  const cols = composerToolCols(input.offsetHeight, visible);
-  if (cols === lastCols && tools.style.getPropertyValue("--tool-cols")) return;
-  lastCols = cols;
-  tools.style.setProperty("--tool-cols", String(cols));
+  return visible;
 }
+
+// Picks the column count for the current text and sizes the input for it. `size(input)`
+// fits the input height to its text and returns nothing; every candidate is laid out and
+// measured inside this one task, so nothing in between is ever painted. Returns false
+// while the composer is hidden (nothing to measure).
+export function fitComposerTools(size) {
+  const tools = document.querySelector(".composer-tools");
+  const input = document.getElementById("input");
+  if (!tools || !input || !input.offsetHeight) return false;
+  const visible = visibleTools(tools);
+  const setCols = (cols) => tools.style.setProperty("--tool-cols", String(cols));
+  const resize = () => { if (size) size(input); };
+  const cols = pickComposerCols(visible, (c) => {
+    setCols(c);
+    resize();
+    return input.offsetHeight;
+  });
+  setCols(cols);
+  resize();
+  lastCols = cols;
+  return true;
+}
+
+// The column count of the last fit, for tests.
+export const composerColsNow = () => lastCols;
