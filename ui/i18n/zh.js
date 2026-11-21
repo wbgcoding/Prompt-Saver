@@ -222,6 +222,7 @@ export default {
     voiceOpenPrivacy: "打开麦克风设置",
     voiceErrBusy: "语音输入已在运行中。",
     voiceErrFailed: "语音输入无法启动。请检查麦克风和 Windows 麦克风隐私设置，然后重试。",
+    voiceWhisperNoModel: "尚未下载语音模型。请在语音设置中下载，或将语音输入切回 Windows。",
     voiceErrNothingHeard: "没有听到任何声音。语音输入使用 Windows 默认麦克风：{mic}。",
     voiceOpenSoundSettings: "声音设置",
     voiceErrNetwork: "语音识别无法连接到在线服务。请检查网络连接。",

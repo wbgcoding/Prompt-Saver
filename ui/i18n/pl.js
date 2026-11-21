@@ -222,6 +222,7 @@ export default {
     voiceOpenPrivacy: "Otwórz ustawienia mikrofonu",
     voiceErrBusy: "Wprowadzanie głosowe jest już uruchomione.",
     voiceErrFailed: "Nie udało się rozpocząć wprowadzania głosowego. Sprawdź mikrofon i ustawienia prywatności mikrofonu w systemie Windows, a następnie spróbuj ponownie.",
+    voiceWhisperNoModel: "Nie pobrano żadnego modelu mowy. Pobierz go w ustawieniach głosu albo przełącz wprowadzanie głosowe z powrotem na Windows.",
     voiceErrNothingHeard: "Nic nie usłyszano. Wprowadzanie głosowe używa domyślnego mikrofonu systemu Windows: {mic}.",
     voiceOpenSoundSettings: "Ustawienia dźwięku",
     voiceErrNetwork: "Rozpoznawanie mowy nie mogło połączyć się z usługą online. Sprawdź połączenie z internetem.",

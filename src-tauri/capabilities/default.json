@@ -182,6 +182,8 @@
     "allow-download-whisper-model",
     "allow-cancel-whisper-download",
     "allow-delete-whisper-model",
+    "allow-whisper-transcribe-file",
+    "allow-whisper-test-corrupt-next-download",
     "allow-set-taskbar-progress",
     "allow-list-bg-ops",
     "allow-open-bg-op-folder",

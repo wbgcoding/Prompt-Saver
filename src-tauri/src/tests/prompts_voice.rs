@@ -1471,23 +1471,29 @@ fn a_shutdown_during_voice_prepare_cancels_the_pending_start() {
 #[test]
 fn the_voice_start_checks_cancel_and_stores_its_handle_under_one_lock() {
     let src = include_str!("../voice_cmds.rs").replace("\r\n", "\n");
-    let at = src.find("pub(crate) async fn voice_start").unwrap();
+    // Both engines start through launch_session, which owns the one hold of the slot.
+    let at = src.find("fn launch_session(").unwrap();
     let body = &src[at..];
     let body = &body[..body.find("\n}\n").unwrap()];
-    let after_prepare = &body[body.find("voice::prepare(lang, true)").unwrap()..];
-    let slot = after_prepare.find("let mut slot = vstate.0.lock()").expect("the slot is taken after prepare");
-    let cancel = after_prepare.find("vstate.2.swap(false").expect("cancel flag is read");
-    let spawn = after_prepare.find("voice::start_session(").expect("session spawn");
-    let store = after_prepare.find("*slot = Some(VoiceHandle").expect("handle stored through the held slot");
+    let slot = body.find("let mut slot = vstate.0.lock()").expect("the slot is taken before the check");
+    let cancel = body.find("vstate.2.swap(false").expect("cancel flag is read");
+    let spawn = body.find(".spawn(run)").expect("session spawn");
+    let store = body.find("*slot = Some(VoiceHandle").expect("handle stored through the held slot");
     assert!(slot < cancel && cancel < spawn && spawn < store, "check, spawn and store under the one guard");
-    assert_eq!(after_prepare.matches("vstate.0.lock()").count(), 1, "no second, separate lock for the handle");
+    assert_eq!(body.matches("vstate.0.lock()").count(), 1, "no second, separate lock for the handle");
     // The tray tooltip call blocks on the main thread, whose window-close handler takes this slot:
     // calling it with the slot held deadlocks a hide during start.
-    let held = &after_prepare[slot..];
+    let held = &body[slot..];
     for (i, _) in held.match_indices("set_tray_recording(") {
         assert!(held[..i].trim_end().ends_with("drop(slot);"), "tray tooltip set while the voice slot is held");
     }
-    assert!(after_prepare[..slot].contains("set_tray_recording(&app, true)"), "recording tooltip set before the slot");
+    assert!(body[..slot].contains("set_tray_recording(app, true)"), "recording tooltip set before the slot");
+    // No start path takes the slot on its own, and each engine goes through the launcher.
+    let start = src.find("pub(crate) async fn voice_start").unwrap();
+    let ws = src.find("fn start_whisper(").unwrap();
+    let rest = [&src[start..], &src[ws..]].map(|t| t[..t.find("\n}\n").unwrap()].to_string()).concat();
+    assert_eq!(rest.matches("VoiceHandle {").count(), 0, "a start path stores the handle outside launch_session");
+    assert_eq!(rest.matches("launch_session(").count(), 2, "both engines launch through launch_session");
 }
 
 #[cfg(windows)]

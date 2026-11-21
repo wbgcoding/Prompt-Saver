@@ -199,6 +199,7 @@ export default {
     voiceOpenPrivacy: "Mikrofon-Einstellungen öffnen",
     voiceErrBusy: "Die Spracheingabe läuft bereits.",
     voiceErrFailed: "Die Spracheingabe konnte nicht gestartet werden. Überprüfe dein Mikrofon und die Windows-Mikrofon-Datenschutzeinstellungen und versuche es dann erneut.",
+    voiceWhisperNoModel: "Es ist kein Sprachmodell geladen. Lade eines in den Spracheinstellungen herunter oder stelle die Spracheingabe auf Windows zurück.",
     voiceErrNothingHeard: "Es wurde nichts gehört. Die Spracheingabe nutzt das Windows-Standardmikrofon: {mic}.",
     voiceOpenSoundSettings: "Soundeinstellungen",
     voiceErrNetwork: "Die Spracherkennung erreicht den Onlinedienst nicht. Prüfe die Internetverbindung.",

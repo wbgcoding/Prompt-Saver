@@ -222,6 +222,7 @@ export default {
     voiceOpenPrivacy: "Abrir configurações do microfone",
     voiceErrBusy: "A entrada de voz já está em execução.",
     voiceErrFailed: "Não foi possível iniciar a entrada de voz. Verifique o microfone e as configurações de privacidade do microfone do Windows e tente novamente.",
+    voiceWhisperNoModel: "Nenhum modelo de voz foi transferido. Transfira um nas definições de voz ou volte a usar a entrada de voz do Windows.",
     voiceErrNothingHeard: "Nada foi ouvido. A entrada de voz usa o microfone predefinido do Windows: {mic}.",
     voiceOpenSoundSettings: "Configurações de som",
     voiceErrNetwork: "O reconhecimento de voz não conseguiu alcançar o serviço online. Verifica a ligação à Internet.",

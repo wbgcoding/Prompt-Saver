@@ -222,6 +222,7 @@ export default {
     voiceOpenPrivacy: "Mikrofon ayarlarını aç",
     voiceErrBusy: "Sesle giriş zaten çalışıyor.",
     voiceErrFailed: "Sesle giriş başlatılamadı. Mikrofonunuzu ve Windows mikrofon gizlilik ayarlarını kontrol edip yeniden deneyin.",
+    voiceWhisperNoModel: "Hiçbir konuşma modeli indirilmedi. Ses ayarlarından bir model indirin veya sesle girişi Windows'a geri alın.",
     voiceErrNothingHeard: "Hiçbir şey duyulmadı. Sesle giriş, Windows varsayılan mikrofonunu kullanır: {mic}.",
     voiceOpenSoundSettings: "Ses ayarları",
     voiceErrNetwork: "Konuşma tanıma çevrimiçi hizmete ulaşamadı. İnternet bağlantını kontrol et.",

@@ -64,6 +64,12 @@ pub(crate) async fn voice_start(
         }
         vstate.2.store(false, std::sync::atomic::Ordering::SeqCst);
     }
+    // The local engine needs no Windows recognizer and no online consent, so it branches off
+    // before voice::prepare() and the consent check below.
+    let local = lock(&state).settings.ui_texts.get(crate::whisper_cmds::VOICE_ENGINE_KEY).is_some_and(|v| v == crate::whisper_cmds::VOICE_ENGINE_WHISPER);
+    if local {
+        return start_whisper(&app, &state, &vstate, lang, auto_stop_sec, max_sec, token);
+    }
     #[cfg(windows)]
     {
         let online_ok = lock(&state).settings.ui_flags.get("voiceOnlineOk").copied().unwrap_or(false);
@@ -95,37 +101,109 @@ pub(crate) async fn voice_start(
         let app2 = app.clone();
         let ended2 = ended.clone();
         let lang2 = resolved_lang.clone();
-        // The cancel flag, the spawn and the handle share one hold of the lock voice_shutdown takes
-        // before it sets that flag: a shutdown landing between the check and the store would find
-        // no session to signal and leave a flag nobody reads, and the microphone would stay open.
-        // The tooltip is set before the session thread starts: a fast failure inside the thread could
-        // otherwise race its own set_tray_recording(false) ahead of this one and leave the tooltip on
-        // "recording". Never while the slot is held: the tooltip call waits for the main thread, and
-        // the main thread takes the slot in voice_shutdown when the window hides.
-        set_tray_recording(&app, true);
-        let mut slot = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
-        // The window closed to the tray while prepare() was awaited: voice_shutdown found no live
-        // session to signal and left this flag instead. Never open the microphone for it.
-        if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
-            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-            drop(slot);
-            set_tray_recording(&app, false);
-            return Err("cancelled".to_string());
-        }
-        if let Err(e) = std::thread::Builder::new()
-            .name("voice-session".into())
-            .spawn(move || voice::start_session(app2, id, token, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
-        {
-            drop(slot);
-            set_tray_recording(&app, false);
-            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-            append_crash_log(&format!("voice: session thread did not start: {e}"));
-            return Err(e.to_string());
-        }
-        *slot = Some(VoiceHandle { id, stop: tx, ended });
-        drop(slot);
-        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+        launch_session(&app, &vstate, "voice-session", id, tx, ended, move || {
+            voice::start_session(app2, id, token, lang2, auto_stop_sec, max_sec, interim, ended2, rx)
+        })?;
         Ok(VoiceStartResult { id, lang: resolved_lang })
+    }
+}
+
+// Runs a session body on its own thread and records its handle in the single session slot. The
+// cancel flag, the spawn and the handle share one hold of the lock voice_shutdown takes before it
+// sets that flag: a shutdown landing between the check and the store would find no session to
+// signal and leave a flag nobody reads, and the microphone would stay open. The tooltip is set
+// before the thread starts: a fast failure inside it could otherwise race its own
+// set_tray_recording(false) ahead of this one and leave the tooltip on "recording". Never while
+// the slot is held: the tooltip call waits for the main thread, and the main thread takes the
+// slot in voice_shutdown when the window hides. Releases the start claim on every way out.
+fn launch_session(
+    app: &AppHandle,
+    vstate: &VoiceState,
+    name: &str,
+    id: u64,
+    stop: std::sync::mpsc::Sender<&'static str>,
+    ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    run: impl FnOnce() + Send + 'static,
+) -> Result<(), String> {
+    set_tray_recording(app, true);
+    let mut slot = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    // The window closed to the tray while the start was being prepared: voice_shutdown found no
+    // live session to signal and left this flag instead. Never open the microphone for it.
+    if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+        drop(slot);
+        set_tray_recording(app, false);
+        return Err("cancelled".to_string());
+    }
+    if let Err(e) = std::thread::Builder::new().name(name.into()).spawn(run) {
+        drop(slot);
+        set_tray_recording(app, false);
+        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+        append_crash_log(&format!("voice: session thread did not start: {e}"));
+        return Err(e.to_string());
+    }
+    *slot = Some(VoiceHandle { id, stop, ended });
+    drop(slot);
+    vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+// Starts a dictation session on the local engine. Refuses with voice-whisper-no-model when no
+// model is downloaded (or the build has no engine); nothing else is asked of the user first.
+fn start_whisper(
+    app: &AppHandle,
+    state: &State<'_, Db>,
+    vstate: &State<'_, VoiceState>,
+    lang: String,
+    auto_stop_sec: u32,
+    max_sec: u32,
+    token: u64,
+) -> Result<VoiceStartResult, String> {
+    let release = |code: &str| {
+        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+        append_crash_log(&format!("voice: local start refused before the session: {code}"));
+        Err(code.to_string())
+    };
+    #[cfg(not(feature = "whisper"))]
+    {
+        let _ = (app, state, &lang, auto_stop_sec, max_sec, token);
+        release("voice-whisper-no-model")
+    }
+    #[cfg(feature = "whisper")]
+    {
+        use crate::whisper_engine::{real, resolved_lang_tag, SessionArgs, SessionConfig, SESSION_POLL};
+        let (chosen, mic_id, ui_lang) = {
+            let g = lock(state);
+            let text = |k: &str| g.settings.ui_texts.get(k).cloned().unwrap_or_default();
+            (text("whisperModel"), text("voiceMic"), resolve_lang(&g.settings.language))
+        };
+        let Some(dir) = whisper_dir() else { return release("voice-whisper-no-model") };
+        let Some(model) = pick_session_model(&|m| model_downloaded(&dir, m), &chosen, recommend(&system_profile())) else {
+            return release("voice-whisper-no-model");
+        };
+        let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (max_sec, auto_stop_sec) = voice::clamp_durations(max_sec, auto_stop_sec);
+        let lang_tag = resolved_lang_tag(&lang, ui_lang);
+        let mic_name = if mic_id.is_empty() { crate::audio::default_mic_name() } else { None };
+        let (tx, stop_rx) = std::sync::mpsc::channel::<&'static str>();
+        let ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // Held from here until the session thread is done with the model (a failed spawn drops it
+        // with the closure), so a delete can never take the file from under a live session.
+        let active = crate::whisper_engine::ActiveModelGuard::set(&WHISPER_ACTIVE_MODEL, model.id);
+        let args = SessionArgs {
+            app: app.clone(),
+            id,
+            token,
+            model,
+            mic_id,
+            mic_name,
+            lang_tag: lang_tag.clone(),
+            cfg: SessionConfig { lang: crate::whisper_audio::whisper_lang(&lang), auto_stop_sec, max_sec, poll: SESSION_POLL },
+            ended: ended.clone(),
+            stop_rx,
+        };
+        launch_session(app, vstate, "whisper-session", id, tx, ended, move || real::run_session(args, active))?;
+        Ok(VoiceStartResult { id, lang: lang_tag })
     }
 }
 

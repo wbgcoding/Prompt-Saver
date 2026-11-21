@@ -216,6 +216,21 @@ pub(crate) fn recommend(p: &SystemProfile) -> &'static str {
     }
 }
 
+// The model a dictation session loads: the chosen one when it is downloaded, else the one that
+// suits this PC when it is, else the first downloaded one in catalog order. None = nothing downloaded.
+#[cfg_attr(not(feature = "whisper"), allow(dead_code))]
+pub(crate) fn pick_session_model(
+    downloaded: &dyn Fn(&WhisperModel) -> bool,
+    chosen: &str,
+    recommended: &str,
+) -> Option<&'static WhisperModel> {
+    [chosen, recommended]
+        .iter()
+        .filter_map(|id| whisper_model(id))
+        .find(|m| downloaded(m))
+        .or_else(|| WHISPER_MODELS.iter().find(|m| downloaded(m)))
+}
+
 // ---------- Model files on disk ----------
 
 // Where the models live: the per-user app folder, never the data folder (which can be shared)
@@ -311,6 +326,35 @@ fn whisper_agent() -> ureq::Agent {
 
 // What the transfer yields: the body and the announced length, if any.
 pub(crate) type WhisperBody = (Box<dyn Read>, Option<u64>);
+
+// Test hook (armed only through a command that refuses without the start-up variable): the next
+// model download arrives with its first byte flipped, so the pinned hash must reject it.
+pub(crate) static WHISPER_CORRUPT_NEXT: AtomicBool = AtomicBool::new(false);
+
+struct FlipFirstByte<R: Read> {
+    inner: R,
+    flipped: bool,
+}
+
+impl<R: Read> Read for FlipFirstByte<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 && !self.flipped {
+            buf[0] ^= 0xFF;
+            self.flipped = true;
+        }
+        Ok(n)
+    }
+}
+
+// Passes the body through, or damages it once when `armed` was set (and clears it).
+pub(crate) fn maybe_corrupt(body: WhisperBody, armed: &AtomicBool) -> WhisperBody {
+    if armed.swap(false, Ordering::SeqCst) {
+        (Box::new(FlipFirstByte { inner: body.0, flipped: false }), body.1)
+    } else {
+        body
+    }
+}
 
 pub(crate) fn open_https(url: &str) -> Result<WhisperBody, String> {
     if !url.starts_with("https://") {

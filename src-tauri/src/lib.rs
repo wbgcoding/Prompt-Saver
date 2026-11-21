@@ -160,6 +160,11 @@ use voice_cmds::*;
 mod whisper;
 use whisper::*;
 
+#[cfg_attr(not(feature = "whisper"), allow(dead_code))]
+mod whisper_audio;
+#[cfg_attr(not(feature = "whisper"), allow(dead_code))]
+mod whisper_engine;
+
 mod whisper_cmds;
 
 // Windows.Media.SpeechRecognition binding. Same shape as mod ocr: COM init confined to the
@@ -256,6 +261,7 @@ mod scheduler;
 pub(crate) const SCHEDULER_STOP_WAIT_MS: u64 = 500;
 
 pub fn run() {
+    whisper_cmds::init_test_hooks();
     // A launch whose own arguments name one of the command line's subcommands never becomes a
     // window: it is answered by the running instance over its named pipe or, with nothing running,
     // executed standalone against the store. Neither path needs WebView2, a Tauri app or the
@@ -1004,6 +1010,8 @@ pub fn run() {
             whisper_cmds::download_whisper_model,
             whisper_cmds::cancel_whisper_download,
             whisper_cmds::delete_whisper_model,
+            whisper_cmds::whisper_transcribe_file,
+            whisper_cmds::whisper_test_corrupt_next_download,
             bg_ops::set_taskbar_progress,
             bg_ops::list_bg_ops,
             bg_ops::open_bg_op_folder,

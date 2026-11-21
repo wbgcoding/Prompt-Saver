@@ -638,6 +638,7 @@ export function routeVoiceError(err) {
   const key = {
     "voice-busy": "voiceErrBusy",
     "voice-failed": "voiceErrFailed",
+    "voice-whisper-no-model": "voiceWhisperNoModel",
     "voice-network": "voiceErrNetwork",
     "voice-mic": "voiceErrMic",
     "voice-audio": "voiceErrAudio",

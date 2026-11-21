@@ -222,6 +222,7 @@ export default {
     voiceOpenPrivacy: "Apri le impostazioni del microfono",
     voiceErrBusy: "L'input vocale è già in esecuzione.",
     voiceErrFailed: "Impossibile avviare l'input vocale. Controlla il microfono e le impostazioni di privacy del microfono di Windows, quindi riprova.",
+    voiceWhisperNoModel: "Nessun modello vocale è stato scaricato. Scaricane uno nelle impostazioni vocali oppure riporta l'input vocale su Windows.",
     voiceErrNothingHeard: "Non si è sentito nulla. L'input vocale usa il microfono predefinito di Windows: {mic}.",
     voiceOpenSoundSettings: "Impostazioni audio",
     voiceErrNetwork: "Il riconoscimento vocale non ha raggiunto il servizio online. Controlla la connessione a Internet.",

@@ -59,6 +59,7 @@ mod util_helpers;
 mod util_helpers_2;
 mod util_helpers_3;
 mod whisper;
+mod whisper_engine;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;

@@ -198,6 +198,7 @@ export default {
     voiceOpenPrivacy: "Ouvrir les paramètres du microphone",
     voiceErrBusy: "La saisie vocale est déjà en cours.",
     voiceErrFailed: "Impossible de démarrer la saisie vocale. Vérifiez votre microphone et les paramètres de confidentialité du microphone de Windows, puis réessayez.",
+    voiceWhisperNoModel: "Aucun modèle vocal n'est téléchargé. Téléchargez-en un dans les réglages vocaux ou repassez la saisie vocale sur Windows.",
     voiceErrNothingHeard: "Rien n'a été entendu. La saisie vocale utilise le microphone par défaut de Windows : {mic}.",
     voiceOpenSoundSettings: "Paramètres son",
     voiceErrNetwork: "La reconnaissance vocale n'a pas pu joindre le service en ligne. Vérifie la connexion Internet.",

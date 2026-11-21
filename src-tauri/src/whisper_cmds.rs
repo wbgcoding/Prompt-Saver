@@ -105,7 +105,12 @@ pub(crate) async fn download_whisper_model(
     let was_first = !any_model_downloaded(&dir);
     let progress_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        install_model(&dir, &WHISPER_VAD, &m.asset, &WHISPER_DOWNLOAD_CANCEL, &open_https, &mut |done, total| {
+        // The test hook damages the model file only, never the voice-activity file.
+        let open = |url: &str| -> Result<WhisperBody, String> {
+            let body = open_https(url)?;
+            Ok(if url == m.asset.url { maybe_corrupt(body, &WHISPER_CORRUPT_NEXT) } else { body })
+        };
+        install_model(&dir, &WHISPER_VAD, &m.asset, &WHISPER_DOWNLOAD_CANCEL, &open, &mut |done, total| {
             let _ = progress_app
                 .emit("whisper-download-progress", serde_json::json!({ "model": m.id, "done": done, "total": total }));
         })
@@ -133,4 +138,61 @@ pub(crate) fn delete_whisper_model(model: String) -> Result<(), String> {
     let m = whisper_model(&model).ok_or_else(|| WHISPER_ERR_UNKNOWN.to_string())?;
     let dir = whisper_dir().ok_or_else(|| "target dir: no per-user folder".to_string())?;
     delete_model_in(&dir, m, &WHISPER_ACTIVE_MODEL)
+}
+
+// ---------- Test hooks ----------
+
+// Two commands exist only for the automated tests: they act when the process was started with
+// PROMPT_SAVER_TEST_HOOKS=1 (read once at start-up) and refuse otherwise.
+pub(crate) const TEST_HOOKS_ENV: &str = "PROMPT_SAVER_TEST_HOOKS";
+pub(crate) const TEST_HOOKS_OFF: &str = "test-hooks-off";
+// The biggest WAV file the file command reads.
+#[cfg_attr(not(feature = "whisper"), allow(dead_code))]
+const TEST_WAV_MAX_BYTES: u64 = 200 * 1024 * 1024;
+static TEST_HOOKS: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn init_test_hooks() {
+    TEST_HOOKS.store(std::env::var(TEST_HOOKS_ENV).is_ok_and(|v| v == "1"), Ordering::SeqCst);
+}
+
+pub(crate) fn require_test_hooks(on: bool) -> Result<(), String> {
+    if on {
+        Ok(())
+    } else {
+        Err(TEST_HOOKS_OFF.to_string())
+    }
+}
+
+// A WAV file through the same pipeline a dictation session uses; returns the phrases' texts.
+// `model` is a catalog id (default: the one a session would pick), `lang` a BCP-47 tag or "auto".
+#[tauri::command(async)]
+pub(crate) fn whisper_transcribe_file(path: String, model: Option<String>, lang: Option<String>) -> Result<Vec<String>, String> {
+    require_test_hooks(TEST_HOOKS.load(Ordering::SeqCst))?;
+    #[cfg(feature = "whisper")]
+    {
+        let dir = whisper_dir().ok_or_else(|| "no per-user folder".to_string())?;
+        let chosen = model.unwrap_or_default();
+        let m = pick_session_model(&|m| model_downloaded(&dir, m), &chosen, recommend(&system_profile()))
+            .ok_or_else(|| "voice-whisper-no-model".to_string())?;
+        let len = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+        if len > TEST_WAV_MAX_BYTES {
+            return Err("wav-too-large".to_string());
+        }
+        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+        let code = lang.as_deref().and_then(crate::whisper_audio::whisper_lang);
+        crate::whisper_engine::real::transcribe_file(m, &bytes, code)
+    }
+    #[cfg(not(feature = "whisper"))]
+    {
+        let _ = (path, model, lang);
+        Err("voice-whisper-no-model".to_string())
+    }
+}
+
+// Arms the damaged-download hook: the next model download is corrupted once.
+#[tauri::command]
+pub(crate) fn whisper_test_corrupt_next_download() -> Result<(), String> {
+    require_test_hooks(TEST_HOOKS.load(Ordering::SeqCst))?;
+    WHISPER_CORRUPT_NEXT.store(true, Ordering::SeqCst);
+    Ok(())
 }
