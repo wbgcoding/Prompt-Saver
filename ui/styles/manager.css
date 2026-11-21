@@ -45,15 +45,15 @@ body.mm-body {
 /* ---- toolbar ---- */
 .mm-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 8px 10px;
   padding: 8px 14px;
   flex: 0 0 auto;
 }
 .mm-search {
-  flex: 1 1 180px;
-  min-width: 140px;
+  flex: 1 1 auto;
+  min-width: 60px;
   max-width: 320px;
   padding: 6px 10px;
   border: 1px solid var(--border);
@@ -65,7 +65,8 @@ body.mm-body {
   user-select: text;
 }
 .mm-search:focus { outline: none; border-color: var(--accent); }
-.mm-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.mm-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+#mm-format { min-width: 58px; }
 .mm-field select {
   padding: 5px 8px;
   border: 1px solid var(--border);
@@ -74,7 +75,19 @@ body.mm-body {
   color: var(--fg);
   font: inherit;
   font-size: 12px;
-  max-width: 150px;
+  max-width: 112px;
+  min-width: 0;
+}
+/* Narrow window: the field names give way to tooltips so every control stays on one row. */
+@media (max-width: 800px) {
+  .mm-field > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 .mm-note {
   padding: 4px 14px;
