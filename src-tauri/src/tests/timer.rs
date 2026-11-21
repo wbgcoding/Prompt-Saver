@@ -614,8 +614,11 @@ fn stale_staged_restores_are_swept_but_other_files_stay() {
 
 pub(super) fn long_child() -> std::process::Command {
     use std::os::windows::process::CommandExt;
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/c", "ping", "-n", "30", "127.0.0.1"]);
+    // ping by its full path: a test binary that links native libraries gets a PATH cargo has
+    // extended with their build folders, and a lookup through cmd can then fail at once.
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let mut cmd = std::process::Command::new(std::path::Path::new(&system_root).join("System32").join("PING.EXE"));
+    cmd.args(["-n", "30", "127.0.0.1"]);
     cmd.stdout(std::process::Stdio::null());
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd
