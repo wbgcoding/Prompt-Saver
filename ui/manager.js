@@ -12,6 +12,7 @@ import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { confirmDialog, initDialogs } from "./dialog.js";
+import { createPreview } from "./managerPreview.js";
 
 // Frameless window: the title shows in the Alt-Tab switcher, so it comes from the brand.
 document.title = APP_NAME;
@@ -31,7 +32,6 @@ const KINDS = ["recordings", "screenshots"];
 const MB = 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PROBE_CHUNK = 24;
-const CLICK_OPEN_DELAY_MS = 260; // a second click inside this window is a double click, not an open
 const REFOCUS_RELIST_MS = 2000;
 const UNDO_TOAST_FALLBACK_MS = 8000;
 const TOAST_PLAIN_MS = 3500;
@@ -89,6 +89,7 @@ function applyI18n() {
   if (syncWinButtons) syncWinButtons();
   buildFilterOptions();
   renderAll();
+  if (preview) preview.sync();
 }
 
 // ---------------------------------------------------------------- theme
@@ -119,7 +120,6 @@ let discarded = [];
 let discOpen = false;
 let ctxNames = [];
 let syncWinButtons = null;
-let clickTimer = 0;
 let toastTimer = 0;
 let noPosterNote = false;
 
@@ -581,6 +581,7 @@ async function loadList({ keepSelection = false } = {}) {
   selected = keepSelection ? new Set([...selected].filter((n) => names.has(n))) : new Set();
   buildFilterOptions();
   renderAll();
+  preview.sync();
   probeMissing(mine);
   loadDiscarded(mine);
 }
@@ -635,6 +636,7 @@ function setKind(next) {
   discarded = [];
   hideToast();
   closeCtx();
+  preview.close();
   buildFilterOptions();
   renderAll();
   loadList();
@@ -754,6 +756,26 @@ async function exportNames(names) {
   try { await invoke("media_export_in_main", { names: list }); } catch (err) { errToast(err); }
 }
 
+// ---------------------------------------------------------------- large view
+
+const preview = createPreview({
+  $, t, fill, invoke, convertFileSrc,
+  kind: () => kind,
+  view: () => view,
+  byName,
+  metaText,
+  posterUrl: (f) => posterUrls.get(posterKey(f)) || "",
+  onClose: (name) => { if (byName(name)) setFocus(name); },
+  actions: {
+    edit: openInEditor,
+    copy: (name) => (kind === "screenshots" ? copyImage(name) : copyFile(name)),
+    player: play,
+    exportOne: (name) => exportNames([name]),
+    reveal,
+    discard: (name) => discardNames([name]),
+  },
+});
+
 // ---------------------------------------------------------------- context menu
 
 function closeCtx() {
@@ -779,8 +801,9 @@ function openCtx(name, x, y) {
   };
   const sep = () => { const s = document.createElement("div"); s.className = "ctx-sep"; menu.appendChild(s); };
   if (!multi) {
+    add(t("mmView"), () => preview.open(name));
     add(t("mmOpenEditor"), () => openInEditor(name));
-    if (kind === "recordings") add(t("mmPlay"), () => play(name));
+    if (kind === "recordings") add(t("mmOpenPlayer"), () => play(name));
     add(t("mmShowInFolder"), () => reveal(name));
     if (kind === "screenshots") add(t("mmCopyImage"), () => copyImage(name));
     add(t("mmCopyFile"), () => copyFile(name));
@@ -817,23 +840,14 @@ grid.addEventListener("click", (e) => {
   setFocus(name, false);
   if (e.shiftKey) { selectRangeTo(name); return; }
   if (e.ctrlKey || e.metaKey) { toggleSelected(name, !selected.has(name)); return; }
-  // A click opens, a double click plays: wait out the second click before opening.
-  clearTimeout(clickTimer);
-  clickTimer = setTimeout(() => openInEditor(name), CLICK_OPEN_DELAY_MS);
-});
-
-grid.addEventListener("dblclick", (e) => {
-  const tile = e.target.closest(".mm-tile");
-  if (!tile || e.target.closest(".mm-check")) return;
-  clearTimeout(clickTimer);
-  play(tile.dataset.name);
+  // A click shows the file large in this window; editing is one button away there.
+  preview.open(name);
 });
 
 grid.addEventListener("contextmenu", (e) => {
   const tile = e.target.closest(".mm-tile");
   e.preventDefault();
   if (!tile) return;
-  clearTimeout(clickTimer);
   const name = tile.dataset.name;
   if (!selected.has(name)) { selected = new Set(); paintSelection(); }
   setFocus(name, false);
@@ -842,8 +856,13 @@ grid.addEventListener("contextmenu", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const inField = e.target instanceof HTMLElement && e.target.closest("input[type=search], input[type=text], select, textarea");
+  if (e.key === "Escape" && !$("mm-ctx").classList.contains("hidden")) { closeCtx(); e.preventDefault(); return; }
+  if (preview.isOpen()) {
+    if (document.querySelector(".confirm-overlay, .modal:not(.hidden)")) return;
+    if (preview.onKey(e)) e.preventDefault();
+    return;
+  }
   if (e.key === "Escape") {
-    if (!$("mm-ctx").classList.contains("hidden")) { closeCtx(); e.preventDefault(); return; }
     if (inField && e.target.id === "mm-search" && e.target.value) {
       e.target.value = "";
       query = "";
@@ -866,7 +885,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "End") { e.preventDefault(); if (view.length) setFocus(view[view.length - 1].name); }
   else if (e.key === "Enter") {
     if (e.target instanceof HTMLButtonElement && !e.target.classList.contains("mm-tile")) return;
-    if (focusName) { e.preventDefault(); openInEditor(focusName); }
+    if (focusName) { e.preventDefault(); preview.open(focusName); }
   } else if (e.key === " ") {
     if (e.target instanceof HTMLButtonElement || !focusName) return;
     e.preventDefault();

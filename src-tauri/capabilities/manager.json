@@ -38,6 +38,7 @@
     "allow-media-open-in-main",
     "allow-media-open-setting",
     "allow-media-play",
+    "allow-media-preview-image",
     "allow-media-poster",
     "allow-media-probe",
     "allow-media-reveal",

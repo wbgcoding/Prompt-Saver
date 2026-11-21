@@ -551,6 +551,7 @@ const RESULTS = {
   media_play: () => null,
   media_copy_file: () => true,
   media_copy_image: () => null,
+  media_preview_image: (a) => mmPosterSvg(String(a.name)),
   media_open_in_main: () => null,
   media_export_in_main: () => null,
   media_open_setting: () => null,

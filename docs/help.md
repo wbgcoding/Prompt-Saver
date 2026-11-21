@@ -359,8 +359,9 @@ screenshot button and choose "Manage screenshots…", or use the button on the
 screenshot folder row in the expert menu or on the screenshots row of the
 storage overview in the backup manager. It looks like the recordings manager:
 a preview tile per screenshot with its size, date and the app it was taken
-of, sorting, filters, search, and the same actions (open in the editor, copy
-the image or the file, show in folder, delete). Only screenshots the app
+of, sorting, filters and search. A click shows the screenshot large in the
+same window, with Edit (opens the screenshot editor), Copy image, Show in
+folder and Delete; the arrow keys step on, Escape goes back. Only screenshots the app
 saved are listed. Deleted ones wait in "Recently discarded" and can be
 restored for a while.
 
@@ -434,9 +435,13 @@ how much space they use, with a "Manage recordings…" button next to it. The
 same window opens from the right-click menu of the record button. It shows
 every recording as a tile with a preview picture, its length, size and date.
 Sort by date, size, length or name; narrow the list by format, age, size or
-length; search by name. A click opens a recording in the video editor, a
-double click plays it, a right-click offers the other actions (show in
-folder, copy the file or its path, delete). Select several tiles (checkbox,
+length; search by name. A click shows the recording large in the same
+window, where it plays right away (MP4, WebM and GIF; other formats show
+their preview picture and a button for the system player). Below it sit
+Edit (opens the video editor), Copy file, Open in player, Export, Show in
+folder and Delete; the arrow keys or the arrows at the top step to the
+next recording, Enter edits, Escape goes back to the overview. A
+right-click on a tile offers the same actions plus copying the path. Select several tiles (checkbox,
 Ctrl or Shift) to export or delete them together. Nothing is removed for
 good right away: deleted files move to "Recently discarded" at the bottom of
 the window, where they can be restored for a while. Previews of some formats
@@ -1278,9 +1283,10 @@ Rechtsklick auf den Screenshot-Button und „Screenshots verwalten…“ wählen
 oder den Button in der Screenshot-Ordner-Zeile des Expertenmenüs bzw. in der
 Screenshot-Zeile der Speicherübersicht im Backup-Manager benutzen. Es sieht aus
 wie der Aufnahmen-Manager: eine Vorschau-Kachel pro Screenshot mit Größe, Datum
-und der Anwendung, von der er stammt, Sortierung, Filter, Suche und dieselben
-Aktionen (im Editor öffnen, Bild oder Datei kopieren, im Ordner zeigen,
-löschen). Aufgelistet werden nur Screenshots, die die App gespeichert hat.
+und der Anwendung, von der er stammt, Sortierung, Filter und Suche. Ein Klick
+zeigt den Screenshot groß im selben Fenster, mit Bearbeiten (öffnet den
+Screenshot-Editor), Bild kopieren, Im Ordner zeigen und Löschen; die
+Pfeiltasten blättern weiter, Escape führt zurück. Aufgelistet werden nur Screenshots, die die App gespeichert hat.
 Gelöschte warten unter „Kürzlich verworfen“ und lassen sich eine Zeit lang
 wiederherstellen.
 
@@ -1339,9 +1345,14 @@ Platz sie belegen, mit einem Button „Aufnahmen verwalten…“ daneben; dassel
 Fenster öffnet sich auch im Rechtsklick-Menü des Aufnahme-Buttons. Es zeigt
 jede Aufnahme als Kachel mit Vorschaubild, Länge, Größe und Datum. Sortiert
 wird nach Datum, Größe, Länge oder Name, gefiltert nach Format, Alter, Größe
-oder Länge, und per Namenssuche. Ein Klick öffnet die Aufnahme im
-Video-Editor, ein Doppelklick spielt sie ab, ein Rechtsklick bietet die
-übrigen Aktionen (im Ordner zeigen, Datei oder Pfad kopieren, löschen).
+oder Länge, und per Namenssuche. Ein Klick zeigt die Aufnahme groß im
+selben Fenster und spielt sie dort ab (MP4, WebM und GIF; andere Formate
+zeigen ihr Vorschaubild und einen Button für den System-Player). Darunter
+liegen Bearbeiten (öffnet den Video-Editor), Datei kopieren, Im Player
+öffnen, Exportieren, Im Ordner zeigen und Löschen; die Pfeiltasten oder
+die Pfeile oben blättern zur nächsten Aufnahme, Enter bearbeitet, Escape
+führt zurück zur Übersicht. Ein Rechtsklick auf eine Kachel bietet
+dieselben Aktionen und zusätzlich Pfad kopieren.
 Mehrere Kacheln (Häkchen, Strg oder Umschalt) lassen sich gemeinsam
 exportieren oder löschen. Gelöscht wird nie sofort endgültig: Dateien wandern
 nach „Kürzlich verworfen“ unten im Fenster und lassen sich eine Zeit lang

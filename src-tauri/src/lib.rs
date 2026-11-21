@@ -1151,6 +1151,7 @@ pub fn run() {
             media_manager::media_play,
             media_manager::media_copy_file,
             media_manager::media_copy_image,
+            media_manager::media_preview_image,
             media_manager::media_discard,
             media_manager::media_list_discarded,
             media_manager::media_restore,

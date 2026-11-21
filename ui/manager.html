@@ -46,6 +46,37 @@
     </div>
   </div>
 
+  <!-- Large view of one file: replaces the toolbar, grid and footer while it is open. -->
+  <section id="mm-view" class="mm-view hidden" aria-labelledby="mm-view-name">
+    <div class="mm-view-bar">
+      <button id="mm-view-back" class="ghost-btn mm-view-back" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+        <span data-i18n="mmBack">Back to overview</span>
+      </button>
+      <div class="mm-view-info">
+        <div id="mm-view-name" class="mm-view-name"></div>
+        <div id="mm-view-meta" class="mm-view-meta"></div>
+      </div>
+      <span id="mm-view-pos" class="mm-view-pos"></span>
+      <button id="mm-view-prev" class="icon-btn" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button id="mm-view-next" class="icon-btn" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div id="mm-view-stage" class="mm-view-stage"></div>
+    <div class="mm-view-actions">
+      <button id="mm-view-edit" class="primary-btn" type="button" data-i18n="mmEdit">Edit</button>
+      <button id="mm-view-copy" class="ghost-btn" type="button"></button>
+      <button id="mm-view-player" class="ghost-btn" type="button" data-i18n="mmOpenPlayer">Open in player</button>
+      <button id="mm-view-export" class="ghost-btn" type="button" data-i18n="mmExportOne">Export</button>
+      <button id="mm-view-reveal" class="ghost-btn" type="button" data-i18n="mmShowInFolder">Show in folder</button>
+      <span class="mm-spacer"></span>
+      <button id="mm-view-del" class="ghost-btn mm-danger" type="button" data-i18n="mmDelete">Delete</button>
+    </div>
+  </section>
+
   <section id="mm-disc" class="mm-disc hidden">
     <button id="mm-disc-head" class="mm-disc-head" type="button" aria-expanded="false">
       <svg class="mm-disc-chev" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>

@@ -13,14 +13,15 @@ saving, backups, recordings, the editors and the installer.
 
 - **Recordings manager.** The recording folder row in the Expert menu and the record button's
   right-click menu open a window with a preview tile for every recording, sorting by date, size,
-  length or name, filters for format, age, size and length, and a search by name. Click opens a
-  recording in the video editor, double click plays it, a right-click menu shows it in its folder or
-  copies it, and several selected recordings can be exported or deleted together. Deleted files wait
+  length or name, filters for format, age, size and length, and a search by name. A click shows a
+  recording large in the same window, where it plays, with buttons to edit, copy, open in the player,
+  export, show it in its folder or delete it, and arrow keys to step to the next one; a right-click menu
+  offers the same, and several selected recordings can be exported or deleted together. Deleted files wait
   in "Recently discarded" and can be restored. This replaces the old "Clean up" dialog.
 - **Screenshots manager.** The same window also lists the screenshots you saved, with the app each
   one was taken of. Open it from the screenshot button's right-click menu, the screenshot folder row
   in the Expert menu or the screenshots row of the storage overview in the backup manager. Clicking a
-  screenshot opens it in the screenshot editor; deleted ones wait in "Recently discarded".
+  screenshot shows it large in the same window, with buttons to edit, copy, show in folder or delete; deleted ones wait in "Recently discarded".
 - **French.** French is now available as a UI language, including the installer,
   the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice
@@ -56,7 +57,9 @@ saving, backups, recordings, the editors and the installer.
   per week or per month) and a new "Copies in this period" figure. While the statistics are on,
   copies are also counted per day and kept for 400 days, independent of the copy history.
 - **Composer tool buttons stack.** The tool buttons next to the text box stack into rows when the box grows,
-  so the text gets more width.
+  so the text gets more width. They only stack once the text stays tall in the wider box as well, so
+  typing near a line break no longer makes them jump back and forth, and the clear X of the text box
+  stays centred at every icon size.
 - **Folder tiles show their members.** A folder in the grid now draws its members as small cards in a
   2x2 or 3x3 grid (their colour or picture and, where there is room, their name; "+N" beyond nine)
   with a small count badge in the corner, instead of one big number and a row of dots.

@@ -83,6 +83,20 @@ fn poster_seek_stays_inside_short_clips() {
 }
 
 #[test]
+fn a_screenshot_preview_is_its_own_picture_and_refuses_foreign_names() {
+    let dir = scratch("preview");
+    let name = "Screenshot-preview-test.png";
+    image::RgbaImage::from_pixel(64, 32, image::Rgba([10, 200, 10, 255])).save(dir.join(name)).unwrap();
+    let url = preview_image_in(&dir, name).expect("a preview");
+    assert!(url.starts_with("data:image/png;base64,"), "a small png travels as itself: {}", &url[..30]);
+    fs::write(dir.join("notes.png"), b"x").unwrap();
+    assert_eq!(preview_image_in(&dir, "notes.png"), Err("not-a-media-file".to_string()));
+    assert_eq!(preview_image_in(&dir, "..\\Screenshot-preview-test.png"), Err("not-a-media-file".to_string()));
+    assert_eq!(preview_image_in(&dir, "Screenshot-gone.png"), Err("media-file-not-found".to_string()));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn an_image_poster_is_a_320_px_wide_jpg_and_is_reused() {
     let dir = scratch("poster");
     let name = "Screenshot-poster-test.png";

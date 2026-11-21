@@ -336,6 +336,7 @@
     "allow-media-play",
     "allow-media-copy-file",
     "allow-media-copy-image",
+    "allow-media-preview-image",
     "allow-media-discard",
     "allow-media-list-discarded",
     "allow-media-restore",

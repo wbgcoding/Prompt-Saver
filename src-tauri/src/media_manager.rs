@@ -494,6 +494,44 @@ pub(crate) fn media_copy_image(state: State<'_, Db>, name: String) -> Result<(),
     crate::images::copy_image_to_clipboard_as(&url, false).map_err(str::to_string)
 }
 
+// A file up to this size travels to the preview as its own bytes; a bigger one is scaled down
+// first, so a huge capture does not push tens of megabytes through the bridge.
+const PREVIEW_RAW_MAX_BYTES: u64 = 12 * 1024 * 1024;
+// The long edge of a scaled-down preview: sharp on a 4K screen.
+const PREVIEW_MAX_EDGE: u32 = 3840;
+
+// The picture of one screenshot for the manager's large view, as a data URL. The screenshot
+// folder stays out of the asset scope, so the page gets the bytes instead of a file URL.
+pub(crate) fn preview_image_in(root: &Path, name: &str) -> Result<String, String> {
+    if !is_media_name(MediaKind::Screenshots, name) {
+        return Err("not-a-media-file".to_string());
+    }
+    let file = root.join(name);
+    let meta = fs::metadata(&file).map_err(|_| "media-file-not-found".to_string())?;
+    if !meta.is_file() {
+        return Err("media-file-not-found".to_string());
+    }
+    if meta.len() <= PREVIEW_RAW_MAX_BYTES {
+        return editor_image_data_url(&file, image::ImageFormat::from_path(&file).ok());
+    }
+    let img = crate::images::decode_image_file(&file.to_string_lossy()).ok_or_else(|| "not-media".to_string())?;
+    let img = if img.width().max(img.height()) > PREVIEW_MAX_EDGE {
+        img.resize(PREVIEW_MAX_EDGE, PREVIEW_MAX_EDGE, FilterType::Triangle)
+    } else {
+        img
+    };
+    let rgb = image::DynamicImage::ImageRgb8(img.to_rgb8());
+    let mut bytes = Vec::new();
+    rgb.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 90)).map_err(|e| e.to_string())?;
+    Ok(format!("data:image/jpeg;base64,{}", base64_encode(&bytes)))
+}
+
+#[tauri::command(async)]
+pub(crate) fn media_preview_image(state: State<'_, Db>, name: String) -> Result<String, String> {
+    let root = media_root(&state, MediaKind::Screenshots);
+    preview_image_in(&root, &name)
+}
+
 // What the manager window asked the main window to do, kept here until the main window pulls
 // it. The event that wakes the main window carries no data: a path, folder or name list taken
 // from an event payload would be whatever any webview chose to emit.

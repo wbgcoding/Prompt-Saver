@@ -94,8 +94,10 @@ ACTS = {
     # opens on, the screenshots after the main window switched it over, and the screenshots empty
     # state with saving to a folder off.
     "recs": "await sleep(1200);",
-    "recs_sel": "await sleep(1000); const tiles = document.querySelectorAll('#mm-grid .mm-tile'); tiles[1]?.click(); tiles[3]?.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); await sleep(500);",
+    "recs_sel": "await sleep(1000); const tiles = document.querySelectorAll('#mm-grid .mm-tile'); tiles[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); tiles[3]?.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); await sleep(500);",
     "shots": "window.__FIRE__('manager-kind', 'screenshots'); await sleep(1200);",
+    "recs_view": "await sleep(1000); document.querySelectorAll('#mm-grid .mm-tile')[2]?.click(); await sleep(800);",
+    "shots_view": "window.__FIRE__('manager-kind', 'screenshots'); await sleep(1200); document.querySelectorAll('#mm-grid .mm-tile')[1]?.click(); await sleep(800);",
     "shots_off": "window.__MM_FILES__ = []; SETTINGS.ui_flags.screenshotSave = false; window.__FIRE__('manager-kind', 'screenshots'); await sleep(1000);",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
     **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "cut", "edit", "ov", "export", "keys")},
@@ -204,7 +206,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
-    "@manager": ["manager.html:recs", "manager.html:recs_sel", "manager.html:shots", "manager.html:shots_off"],
+    "@manager": ["manager.html:recs", "manager.html:recs_sel", "manager.html:shots", "manager.html:shots_off", "manager.html:recs_view", "manager.html:shots_view"],
     "manager_shots": ["manager.html:shots"],
     "@snip": ["snipedit", "snip_edit_ocr", "snipdraw", "snipsel", "snipcrop", "sniptext", "sniptextsel"],
     "@composer": ["main", "composer_tall"],
