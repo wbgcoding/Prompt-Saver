@@ -812,6 +812,45 @@ const RESULTS = {
   voice_start: () => ({ id: 1, lang: "en-US" }),
   voice_stop: () => null,
   voice_enable_online_speech: () => { SETTINGS.ui_flags = { ...SETTINGS.ui_flags, voiceOnlineOk: true }; return null; },
+  // The local Whisper engine: a catalog that recommends "small", models a probe marks as
+  // downloaded in window.__WHISPER_HAVE__, and a download that reports progress events and then
+  // waits on window.__WHISPER_GATE__ (a probe resolves it) so the progress state can be inspected.
+  list_mic_devices: () => [{ id: "mic-a", name: "Desk microphone" }, { id: "mic-b", name: "Headset (USB)" }],
+  whisper_catalog: () => {
+    const have = window.__WHISPER_HAVE__ || [];
+    return {
+      models: [["base", 59707625], ["small", 190085487], ["turbo", 574041195]].map(([id, bytes]) => (
+        { id, file: "ggml-" + id + ".bin", bytes, label_key: { base: "whisperModelBase", small: "whisperModelSmall", turbo: "whisperModelTurbo" }[id],
+          quality_key: "whisperQuality" + id, downloaded: have.includes(id) })),
+      recommended: "small",
+      profile: { physical_cores: 8, logical_cores: 16, ram_gb: 16, avx2: true },
+      vad_downloaded: have.length > 0,
+      downloading: !!window.__WHISPER_DOWNLOADING__,
+      supported: window.__WHISPER_SUPPORTED__ !== false,
+    };
+  },
+  grant_whisper_download_consent: () => null,
+  download_whisper_model: ({ model }) => new Promise((resolve, reject) => {
+    window.__WHISPER_DOWNLOADING__ = model;
+    const total = { base: 59707625, small: 190085487, turbo: 574041195 }[model];
+    window.__FIRE__("whisper-download-progress", { model, done: Math.floor(total / 3), total });
+    const finish = () => {
+      window.__WHISPER_DOWNLOADING__ = null;
+      if (window.__WHISPER_FAIL__) { reject(window.__WHISPER_FAIL__); return; }
+      const first = !(window.__WHISPER_HAVE__ || []).length;
+      window.__WHISPER_HAVE__ = [...(window.__WHISPER_HAVE__ || []), model];
+      if (first) SETTINGS.ui_texts = { ...SETTINGS.ui_texts, voiceEngine: "whisper" };
+      resolve({ model, engine_set: first });
+    };
+    if (window.__WHISPER_GATE__) window.__WHISPER_GATE__.push({ finish, reject });
+    else setTimeout(finish, 50);
+  }),
+  cancel_whisper_download: () => {
+    const gate = (window.__WHISPER_GATE__ || []).shift();
+    if (gate) { window.__WHISPER_DOWNLOADING__ = null; gate.reject("cancelled"); }
+    return null;
+  },
+  delete_whisper_model: ({ model }) => { window.__WHISPER_HAVE__ = (window.__WHISPER_HAVE__ || []).filter((m) => m !== model); return null; },
   speech_capabilities: () => window.__OCR_CAPS_TEST__ || [],
   speech_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
   speech_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),

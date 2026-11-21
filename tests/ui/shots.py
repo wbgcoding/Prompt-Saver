@@ -38,6 +38,12 @@ for (let i = 0; i < 40; i++) {
 }
 await sleep(300);
 """
+OPEN_WHISPER = (
+    "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); "
+    "const find = () => document.querySelector(\".expert-action[data-action='whisper-models-open']\"); let wb = find(); "
+    "for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) { if (wb) break; tab.click(); await sleep(150); wb = find(); } "
+    "wb.click(); await sleep(600);"
+)
 TILE_MENU = """
 const t = document.querySelector('#grid .tile[data-id]'); const r = t.getBoundingClientRect();
 t.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 30, clientY: r.top + 30 }));
@@ -119,6 +125,13 @@ ACTS = {
     # what is visible of it, so a compaction of the dialog can be compared as numbers.
     "settings_probe": "$('gear').click(); await sleep(300); const sm = $('settings-main'); const pr = document.createElement('pre'); pr.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;color:#000;font:700 22px monospace;padding:8px'; pr.textContent = 'scrollHeight=' + sm.scrollHeight + ' clientHeight=' + sm.clientHeight + ' width=' + $('settings').querySelector('.modal').clientWidth; document.body.appendChild(pr);",
     "tour": '$(\'gear\').click(); await sleep(300); $(\'expert-open\').click(); await sleep(400); const find = () => document.querySelector(".expert-action[data-action=\'tour-open\']"); let tb = find(); for (const tab of document.querySelectorAll(\'#expert-tabs-bar .expert-tab\')) { if (tb) break; tab.click(); await sleep(150); tb = find(); } tb.click(); await sleep(500); const hs = []; for (let i = 0; i < 4; i++) { hs.push(Math.round($(\'tour-body\').getBoundingClientRect().height) + \'/\' + Math.round(document.querySelector(\'#tour-body .tour-step\').offsetHeight)); if (i < 3) { $(\'tour-next\').click(); await sleep(150); } } $(\'tour-dots\').querySelector(\'.tour-dot\').click(); await sleep(200); const pr = document.createElement(\'pre\'); pr.style.cssText = \'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;color:#000;font:700 18px monospace;padding:6px\'; pr.textContent = \'body/step per page: \' + hs.join(\'  \') + \'  box=\' + Math.round(document.querySelector(\'#tour-modal .tour-modal-box\').getBoundingClientRect().height); document.body.appendChild(pr);',
+    # The dictation group of the expert menu with the local engine picked (microphone row shown),
+    # and the Whisper model manager: nothing downloaded yet, then one model installed and another
+    # coming in (the download is held open so the progress row is on screen).
+    "expert_dictation": "const core = await import('./core.js'); core.settings.ui_flags.voice = true; core.settings.ui_texts = { ...core.settings.ui_texts, voiceEngine: 'whisper' }; $('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); const find = () => document.querySelector(\".expert-action[data-action='whisper-models-open']\"); let wb = find(); for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) { if (wb) break; tab.click(); await sleep(150); wb = find(); } document.querySelector('[data-setting-row=\"voiceMic\"]').scrollIntoView({ block: 'center' }); await sleep(200);",
+    "whisper_models": "SETTINGS.ui_flags.voice = true; " + OPEN_WHISPER,
+    "whisper_models_dl": "SETTINGS.ui_flags.voice = true; window.__WHISPER_HAVE__ = ['small']; window.__WHISPER_GATE__ = []; " + OPEN_WHISPER + " [...document.querySelectorAll('#whisper-models-body .whisper-card')].find((c) => c.dataset.model === 'turbo').querySelector('button').click(); await sleep(300); $('confirm-ok').click(); await sleep(500);",
+    "whisper_models_nocpu": "SETTINGS.ui_flags.voice = true; window.__WHISPER_SUPPORTED__ = false; " + OPEN_WHISPER,
     "expert_system": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].at(-1).click(); await sleep(300); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     "expert_end": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     **{f"expert_t{i}": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')][" + str(i) + "].click(); await sleep(300);" for i in range(6)},

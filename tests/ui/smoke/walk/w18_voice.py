@@ -219,7 +219,7 @@ SECTION = """\
             if (!lines.length || lines.some((l) => !l || isRawKey(l))) {
               out.errors.push('Tour step ' + step + ': missing text line or raw key (' + JSON.stringify(lines) + ')');
             }
-            if (lines.length > 3) out.errors.push('Tour step ' + step + ': more than three text lines');
+            if (lines.length > 4) out.errors.push('Tour step ' + step + ': more than four text lines');
           }
           if (document.querySelector('.tour-opt-row, .tour-setup-row, .tour-restore-btn')) {
             out.errors.push('Tour step ' + step + ': a settings row is still rendered');

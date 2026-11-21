@@ -39,8 +39,8 @@ def main():
     if not re.search(r"export const TOUR_STEP_COUNT = TOUR_STEPS\.length;", src):
         problems.append("TOUR_STEP_COUNT must equal TOUR_STEPS.length (no extra page after the drawing steps)")
     for title, lines in steps:
-        if not 1 <= len(lines) <= 3:
-            problems.append(f"step {title!r}: {len(lines)} text lines, expected 1 to 3")
+        if not 1 <= len(lines) <= 4:
+            problems.append(f"step {title!r}: {len(lines)} text lines, expected 1 to 4")
     for code in LANGS:
         keys = lang_keys(code)
         for title, lines in steps:

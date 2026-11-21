@@ -282,7 +282,9 @@ prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
 a few seconds of silence.
 
-Right-click the microphone button for the most used voice input settings. Voice input always records from the Windows default microphone; change it in the Windows sound settings. If nothing is heard, a message names that microphone and opens the sound settings; other failures (no internet connection, microphone blocked, sound too quiet) get a message of their own.
+Right-click the microphone button for the most used voice input settings. Windows' own recognition always records from the Windows default microphone; change it in the Windows sound settings.
+
+Under Voice input in the expert menu, "Recognition" switches from Microsoft's online speech recognition to a local Whisper model that runs fully on your PC, so no audio leaves it. "Whisper models…" opens the model manager: it marks the model that suits your PC, asks once before a model is downloaded, and lets you switch between downloaded models or delete one. The first download also turns the local recognition on. With it, the text appears sentence by sentence after each pause, and you can pick the microphone. It needs a processor with AVX2. If nothing is heard, a message names that microphone and opens the sound settings; other failures (no internet connection, microphone blocked, sound too quiet) get a message of their own.
 
 Spoken punctuation and simple commands are turned into real characters unless
 Windows already placed them itself: "comma", "period", "question mark",
@@ -1244,7 +1246,9 @@ auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet.
 „neue Zeile“ …) werden zu echten Zeichen; „wörtlich“ vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
-Windows-Sprachpaket (derselbe Dialog wie bei OCR). Ein Rechtsklick auf den Mikrofon-Knopf zeigt die wichtigsten Einstellungen der Spracheingabe. Die Spracheingabe nimmt immer über das Standardmikrofon von Windows auf; ändern kannst du es in den Sound-Einstellungen von Windows. Wird nichts gehört, nennt eine Meldung dieses Mikrofon und öffnet die Sound-Einstellungen; andere Fehler (keine Internetverbindung, Mikrofon gesperrt, Ton zu leise) bekommen eine eigene Meldung.
+Windows-Sprachpaket (derselbe Dialog wie bei OCR). Ein Rechtsklick auf den Mikrofon-Knopf zeigt die wichtigsten Einstellungen der Spracheingabe. Die Erkennung von Windows nimmt immer über das Standardmikrofon von Windows auf; ändern kannst du es in den Sound-Einstellungen von Windows.
+
+Im Expertenmenü unter Spracheingabe schaltet „Erkennung“ von der Online-Spracherkennung von Microsoft auf ein lokales Whisper-Modell um, das komplett auf deinem PC läuft; es verlässt also keine Aufnahme den PC. „Whisper-Modelle…“ öffnet die Modellverwaltung: Sie markiert das Modell, das zu deinem PC passt, fragt einmal vor dem Download nach und lässt dich zwischen geladenen Modellen wechseln oder eines löschen. Der erste Download schaltet die lokale Erkennung auch gleich ein. Dann erscheint der Text satzweise nach jeder Sprechpause, und du kannst das Mikrofon wählen. Sie braucht einen Prozessor mit AVX2. Wird nichts gehört, nennt eine Meldung dieses Mikrofon und öffnet die Sound-Einstellungen; andere Fehler (keine Internetverbindung, Mikrofon gesperrt, Ton zu leise) bekommen eine eigene Meldung.
 
 **Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim

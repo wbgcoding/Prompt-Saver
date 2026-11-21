@@ -1336,6 +1336,24 @@
     </div>
   </div>
 
+  <!-- Whisper model manager: opened from the dictation group of the expert menu. -->
+  <div id="whisper-models-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="whisper-models-title">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="whisper-models-title" class="modal-title" data-i18n="whisperModels">Whisper models…</h2>
+        <button id="whisper-models-close-x" class="icon-btn" data-i18n-title="close" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <p class="modal-hint" data-i18n="whisperPhraseHint">Text appears sentence by sentence, shortly after each pause.</p>
+      <p id="whisper-models-pc" class="modal-hint whisper-pc"></p>
+      <p id="whisper-models-cpu" class="modal-hint whisper-cpu hidden"></p>
+      <div id="whisper-models-body" class="clip-list"></div>
+    </div>
+  </div>
+
   <!-- Screenshot editor -- opens right after a capture or for an opened image
        file. Full-bleed overlay (no centered modal box): toolbar on top, canvas
        below, actions bottom-right. -->

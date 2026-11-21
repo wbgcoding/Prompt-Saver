@@ -884,6 +884,26 @@ input[type="password"]::-ms-clear { display: none; }
 .ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
 .ocr-langs-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .ocr-langs-foot .modal-hint { margin: 0; }
+/* Whisper model manager (#whisper-models-modal): a card per model on the same list chrome. */
+.whisper-pc { margin: 0 0 6px; }
+.whisper-cpu { margin: 0 0 6px; color: var(--danger); }
+.whisper-card { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.whisper-card.is-active { border-color: var(--accent); }
+.whisper-card-main { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.whisper-card-name { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; white-space: normal; }
+.whisper-card-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.whisper-card-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
+.whisper-card-actions .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.whisper-badge {
+  flex: 0 0 auto; padding: 1px 8px; border: 1px solid var(--accent); border-radius: 10px;
+  font-size: 11px; font-weight: 600; color: var(--accent-text); white-space: nowrap;
+}
+.whisper-progress { flex: 1 0 100%; display: flex; align-items: center; gap: 10px; }
+.whisper-progress-track { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.whisper-progress-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
+.whisper-progress-text { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.whisper-progress-cancel { padding: 3px 10px; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .whisper-progress-fill { transition: none; } }
 /* Raw PowerShell/DISM text behind an elevation-needed notice: collapsed
    by default so it never crowds out the actual instruction above it. */
 .lang-error-details { margin-top: 6px; }

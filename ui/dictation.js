@@ -6,6 +6,7 @@ import { copyTextChecked, fmtBytes } from "./floatShared.js";
 import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache, dropdownRow, flagRow, valueRow } from "./expertMenu.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
+import { openWhisperModels, wireWhisperModels } from "./whisperModels.js";
 import { autoPasteNow } from "./tiles.js";
 
 // ---- OCR + voice language pack management, one shared dialog ----
@@ -808,4 +809,6 @@ export function bindDictation() {
 export function wireDictation() {
   EXPERT_ACTIONS["ocr-langs-open"] = openOcrLangsModal;
   EXPERT_ACTIONS["voice-langs-open"] = openVoiceLangsModal;
+  EXPERT_ACTIONS["whisper-models-open"] = openWhisperModels;
+  wireWhisperModels();
 }

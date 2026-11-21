@@ -17,9 +17,10 @@ import { applyTheme, applyTileStyle, bindTheme, closeThemeEditor, wireTheme } fr
 import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
 import { bindHotkeys } from "./hotkeys.js";
 import { bindAbout } from "./about.js";
-import { applyFlags, applyIconZoom, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
+import { applyFlags, applyIconZoom, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignWhisperCatalogCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
+import { closeWhisperModels } from "./whisperModels.js";
 import { bindDictation, closeLangsModal, closeVoicePop, voicePop, wireDictation } from "./dictation.js";
 import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, rebaseModalOnStored, setupDragDrop, wireEditor } from "./editor.js";
 import { cacheFloatingState, closeTileFolderPop, tileFolderPop, wireGridFolders } from "./gridFolders.js";
@@ -138,7 +139,7 @@ function bind() {
   // Dialogs that live at the base z-index and later in the page than most other
   // overlays, topmost first. Promise-based ones have no close function of their
   // own: pressing their cancel/close button resolves them the way a click does.
-  const STACKED_DIALOGS = ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"];
+  const STACKED_DIALOGS = ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "import-folder-modal", "import-preview-modal", "error-log-modal", "whisper-models-modal"];
   const STACKED_DIALOG_CLOSE = {
     "ocr-langs-modal": closeLangsModal,
     "ocr-modal": () => $("ocr-modal-close").click(),
@@ -146,6 +147,7 @@ function bind() {
     "import-folder-modal": () => $("import-folder-cancel").click(),
     "import-preview-modal": () => $("import-preview-cancel").click(),
     "error-log-modal": () => $("error-log-close").click(),
+    "whisper-models-modal": closeWhisperModels,
   };
   function closeStackedDialog() {
     const id = STACKED_DIALOGS.find((d) => !$(d).classList.contains("hidden"));
@@ -561,6 +563,7 @@ async function init() {
         assignCameraDevicesCache(devs.filter((d) => d.kind === "videoinput").map((d, i) => ({ id: d.deviceId, name: d.label || t("cameraDeviceN").replace("{n}", () => String(i + 1)) })));
       })
       .catch(() => {});
+    invoke("whisper_catalog").then((cat) => { assignWhisperCatalogCache(cat); }).catch(() => {});
     invoke("voice_languages").then((langs) => { assignVoiceLangsCache(langs || []); }).catch(() => {});
     // Re-applies flags once this resolves so no-voice-engine reflects reality
     // (the optimistic default above assumes support until this says otherwise).

@@ -176,6 +176,9 @@ export const ERROR_MSG_KEYS = {
   "not a {} backup": "errUnknownBackupFormat",
   "snapshot-failed": "persistFailed",
   "history-failed": "persistFailed",
+  "whisper-damaged": "whisperDamaged",
+  "whisper-busy": "whisperBusy",
+  "whisper-model-in-use": "whisperModelInUse",
 };
 // Entries whose key holds a "{...}" part (the Rust side formats a value into the
 // sentence) match any text in that spot; the captured values fill {n}, then {m}, in

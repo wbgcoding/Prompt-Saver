@@ -204,6 +204,32 @@ export const EXPERT_DROPDOWNS = {
       await persistUiText("voiceLang", v);
     },
   },
+  // Which engine turns speech into text: Windows' online recognition or the local Whisper model.
+  // The Whisper entry is greyed out on a processor without AVX2 (whisperCatalogCache.supported).
+  voiceEngine: {
+    label: "voiceEngine",
+    gate: "voice",
+    def: "windows",
+    options: () => [["windows", t("voiceEngineWindows")], ["whisper", t("voiceEngineWhisper")]],
+    disabled: (v) => v === "whisper" && whisperCatalogCache?.supported === false,
+    hint: () => (whisperCatalogCache?.supported === false ? t("voiceWhisperCpu") : ""),
+    get: () => (settings.ui_texts?.voiceEngine === "whisper" ? "whisper" : "windows"),
+    set: async (v) => {
+      await persistUiText("voiceEngine", v === "whisper" ? "whisper" : "windows");
+    },
+  },
+  // The microphone the local engine listens to (Windows' own engine always uses the default one).
+  // Same device list as recMicDevice; the row only shows while the local engine is picked.
+  voiceMic: {
+    label: "voiceMic",
+    gate: "voice",
+    def: "",
+    options: () => [["", t("voiceMicDefault")], ...micDevicesCache.map((d) => [d.id, d.name])],
+    get: () => settings.ui_texts?.voiceMic || "",
+    set: async (v) => {
+      await persistUiText("voiceMic", v);
+    },
+  },
   voiceInsert: enumDropdown("voiceInsert", "valVoiceInsert",
     [["caret", "voiceInsertCaret"], ["end", "voiceInsertEnd"]], "caret", "voice"),
   voiceHotkeyTarget: enumDropdown("voiceHotkeyTarget", "valVoiceHotkeyTarget",
@@ -799,6 +825,7 @@ export function dropdownRow(key) {
     o.value = value;
     o.textContent = lbl;
     if (stack) o.style.fontFamily = stack;
+    if (cfg.disabled?.(value)) o.disabled = true;
     sel.appendChild(o);
   }
   sel.value = cfg.get();
@@ -811,12 +838,24 @@ export function dropdownRow(key) {
     if (key === "screenshotFormat") {
       document.querySelector('[data-setting-row="snipSaveQuality"]')?.classList.toggle("hidden", cfg.get() !== "jpeg");
     }
+    // The microphone choice belongs to the local engine only.
+    if (key === "voiceEngine") {
+      document.querySelector('[data-setting-row="voiceMic"]')?.classList.toggle("hidden", cfg.get() !== "whisper");
+    }
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild
   });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
   if (key === "recQuality" || key === "recFormat") row.appendChild(recFfmpegHintEl(key, sel));
+  const hintText = cfg.hint?.();
+  if (hintText) {
+    const hint = document.createElement("div");
+    hint.className = "expert-row-hint";
+    hint.textContent = hintText;
+    row.appendChild(hint);
+  }
+  if (key === "voiceMic") row.classList.toggle("hidden", txt("voiceEngine") !== "whisper");
   return row;
 }
 
@@ -909,6 +948,8 @@ export function ensureFfmpegStatusChecked() {
     // the probe again at once, an endless loop of failing calls.
     .catch(() => { ffmpegAvailable = null; ffmpegChecking = false; });
 }
+export let whisperCatalogCache = null; // whisper_catalog()'s answer, fetched at startup and on every open of the model manager
+export function assignWhisperCatalogCache(v) { whisperCatalogCache = v; }
 export let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
 export function assignVoiceLangsCache(v) { voiceLangsCache = v; }
 // voice_support()'s answer, optimistic before it resolves (this app is

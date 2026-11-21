@@ -61,7 +61,7 @@ export const TOUR_SVG_LIBRARY = `<svg viewBox="0 0 100 100" width="110" height="
 
 // The steps: drawing + text.
 export const TOUR_STEPS = [
-  { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2", "tourStep1Line3"], svg: TOUR_SVG_WELCOME },
+  { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2", "tourStep1Line3", "tourWhisper"], svg: TOUR_SVG_WELCOME },
   { titleKey: "tourStep2Title", lineKeys: ["tourStep2Line1", "tourStep2Line2", "tourStep2Line3"], svg: TOUR_SVG_USAGE },
   { titleKey: "tourStep3Title", lineKeys: ["tourStep3Line1", "tourStep3Line2", "tourStep3Line3"], svg: TOUR_SVG_TILES },
   { titleKey: "tourStep4Title", lineKeys: ["tourStep4Line1", "tourStep4Line2", "tourStep4Line3"], svg: TOUR_SVG_LIBRARY },

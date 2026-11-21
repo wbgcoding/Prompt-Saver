@@ -499,8 +499,8 @@ export const EXPERT_TABS = [
     // Auto-advancing through a rotation. Not a capture tool, so it stays in tab 1.
     { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries"], dropdowns: ["rotateDefaultMode"] },
     // Voice dictation puts text into the composer like typing does, so it stays in tab 1.
-    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
-      actions: [{ id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
+    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceEngine", "voiceMic", "voiceLang", "voiceInsert", "voiceHotkeyTarget"],
+      actions: [{ id: "whisper-models-open", label: "whisperModels", gate: "voice" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
   ] },
   { title: "expTabCapture", groups: [
     // Everything below is a capture tool: it reads something off the screen or the
@@ -601,7 +601,7 @@ export const EXPERT_TIPS = [
   "snipEditSnap", "snipTextBack", "snipEditDefaultTool",
   "ocr", "ocrLang", "ocrCropFirst",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
-  "voiceLang", "voiceInsert", "voiceOnlineOk",
+  "voiceEngine", "voiceMic", "voiceLang", "voiceInsert", "voiceOnlineOk",
   "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "traySearch",
   "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",

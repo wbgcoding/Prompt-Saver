@@ -169,7 +169,7 @@ call helper `run_chrome`, the manifest recorder), `main_walk.py` (size walk and 
 probe is assembled from `walk/w01..w19`, one fragment per surface), `side_windows.py`, `video.py`
 (also the seeded expert boot), `boots.py` (single boots), `logic.py` (one main-window boot for
 page-logic checks: dialog guards, counters, cooldowns, races, expert-row sync) and `findings.py` (the generated findings
-block), `composer.py` (the composer tool buttons and clear X), `whisper.py` (local dictation probes) and `arprobe.py` (the shared one-boot-per-probe runner of `findings` and `composer`). `python tests/ui/smoke_test.py --only <suite>` runs one suite (repeatable; `main_walk`,
+block), `composer.py` (the composer tool buttons and clear X), `whisper.py` (local dictation probes and the Whisper model manager) and `arprobe.py` (the shared one-boot-per-probe runner of `findings` and `composer`). `python tests/ui/smoke_test.py --only <suite>` runs one suite (repeatable; `main_walk`,
 `side_windows`, `video`, `boots`, `logic`, `video_expert`, `composer`, `findings`, `whisper`); without it everything runs.
 
 Probe rule: a probe block starts with `// <id>:` and every failure it pushes starts with `<id>:`;

@@ -22,6 +22,12 @@ saving, backups, recordings, the editors and the installer.
   one was taken of. Open it from the screenshot button's right-click menu, the screenshot folder row
   in the Expert menu or the screenshots row of the storage overview in the backup manager. Clicking a
   screenshot shows it large in the same window, with buttons to edit, copy, show in folder or delete; deleted ones wait in "Recently discarded".
+- **Offline dictation with Whisper.** Voice input can use a local Whisper model instead of Microsoft's
+  online recognition, so no audio leaves the PC. "Recognition" in the Expert menu switches the engine,
+  "Whisper models…" opens a manager that marks the model suited to your PC, asks once before a download,
+  shows its progress and lets you switch between models or delete one. The first download turns the
+  local engine on. Text appears sentence by sentence after each pause, the microphone can be chosen,
+  and a processor without AVX2 is told so instead of failing.
 - **French.** French is now available as a UI language, including the installer,
   the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice
