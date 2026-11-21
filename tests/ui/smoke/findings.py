@@ -1,75 +1,11 @@
 """Findings suite: the main-window probes generated from the review findings, each with its own boot."""
-import json
-import re
-
-from .harness import REPO, unescape, run_chrome
+from .arprobe import make_ar_probe
 
 
 def run(browser, tmp):
     failed = 0
     # ---- main window findings: generated block begin ----
-    ar_scaffold = r"""
-<script>
-(async () => {
-  const errs = [];
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const until = async (fn, tries) => { for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50); return fn(); };
-  try {
-%s
-%s
-  } catch (e) { errs.push('probe threw: ' + e.message); }
-  errs.push(...(window.__SMOKE_ERRORS__ || []));
-  const pre = document.createElement('pre');
-  pre.id = 'SMOKE';
-  pre.textContent = JSON.stringify(errs);
-  document.body.appendChild(pre);
-})();
-</script>
-"""
-
-    def ar_probe(tag, label, page, size, pre, body):
-        side = tmp / "ui" / f"ar-{tag}.html"
-        side.write_text(
-            (REPO / "ui" / f"{page}.html").read_text(encoding="utf-8")
-            .replace("<script", pre + '<script src="tauri_stub.js"></script>\n<script', 1)
-            .replace("</body>", ar_scaffold % (ar_common, body) + "</body>"),
-            encoding="utf-8")
-        w, h = size.split("x")
-        proc = run_chrome(browser, tmp / ('profile-ar-' + tag), f"{w},{h}", 45000, side.as_uri(), 180)
-        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
-        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-        print(f"-- {label}")
-        for e in errs:
-            print(f"   FAIL: {e}")
-        if not errs:
-            print("   ok")
-        return len(errs)
-
-    ar_common = r"""
-    const visible = (el) => !!el && !el.classList.contains('hidden');
-    const callsFor = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).map(([, a]) => a);
-    const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
-    const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-    const ptr = (type, x, y, el, extra) => (el || window).dispatchEvent(new PointerEvent(type, Object.assign({
-      bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 6, clientX: x, clientY: y,
-    }, extra || {})));
-    const dragTo = async (tile, tx, ty) => {
-      const [sx, sy] = centre(tile);
-      ptr('pointerdown', sx, sy, tile);
-      ptr('pointermove', sx + 8, sy - 8, tile);
-      await sleep(60);
-      ptr('pointermove', tx, ty, window);
-      await sleep(60);
-    };
-    const endDrag = async (x, y) => { ptr('pointerup', x, y, window); await sleep(300); };
-    const bootReady = async () => {
-      await until(() => document.querySelectorAll('#grid .tile').length > 0, 200);
-      const cm = document.getElementById('confirm-modal');
-      for (let i = 0; i < 60 && !visible(cm); i++) await sleep(50);
-      if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
-    };
-    const cellEl = (c, r) => document.querySelector('#grid .cell[data-col="' + c + '"][data-row="' + r + '"]');
-"""
+    ar_probe = make_ar_probe(browser, tmp)
 
     failed += ar_probe('f1', 'grid folder: a tile dropped on its cell sends the folder to the vacated cell', 'index', '1000x780', '', r"""
     await bootReady();
@@ -2214,38 +2150,6 @@ def run(browser, tmp):
       if (cy < 11 || cy > 13) errs.push('brs01: ' + n + ' icon centre y is ' + cy);
     }
     if (Math.abs(t.height - b.height) > 0.5) errs.push('brs01: icon heights differ: ' + t.height + ' vs ' + b.height);
-    """)
-    # Composer button order: Screenshot, Recording, Text recognition, Pipette, File, Voice input.
-    failed += ar_probe('bco01', 'composer: the buttons sit in the agreed order', 'index', '880x600', '', r"""
-    await bootReady();
-    const ids = [...document.querySelectorAll('footer.composer > .composer-tools > button.composer-img-btn')].map(b => b.id);
-    const want = ['snip-btn', 'record-btn', 'ocr-btn', 'picker-btn', 'file-btn', 'voice-btn'];
-    if (JSON.stringify(ids.slice(0, want.length)) !== JSON.stringify(want)) errs.push('bco01: composer order is ' + JSON.stringify(ids));
-    """)
-    # A tall composer text box stacks the tool buttons into rows (same order, bottom aligned); a single line puts them in one row again.
-    failed += ar_probe('bco02', 'composer: the tool buttons stack beside a tall text box and return to one row', 'index', '880x600', '', r"""
-    await bootReady();
-    const core = await import('./core.js');
-    const tools = document.querySelector('.composer-tools');
-    const rowsOf = () => new Set([...tools.children].map((b) => Math.round(b.getBoundingClientRect().top))).size;
-    core.inputEl.value = '';
-    core.autoGrow(core.inputEl);
-    await sleep(100);
-    if (rowsOf() !== 1) errs.push('bco02: one line should give one row, got ' + rowsOf());
-    core.inputEl.value = Array.from({ length: 12 }, (_, i) => 'line ' + i).join(String.fromCharCode(10));
-    core.autoGrow(core.inputEl);
-    await sleep(100);
-    if (tools.style.getPropertyValue('--tool-cols') !== '2') errs.push('bco02: tall box should give 2 columns, got ' + tools.style.getPropertyValue('--tool-cols'));
-    if (rowsOf() < 2) errs.push('bco02: tall box should stack the buttons, got ' + rowsOf() + ' row(s)');
-    const ids = [...tools.children].map((b) => b.id).join();
-    if (ids !== 'snip-btn,record-btn,ocr-btn,picker-btn,file-btn,voice-btn') errs.push('bco02: order changed: ' + ids);
-    const lastBottom = Math.round(tools.lastElementChild.getBoundingClientRect().bottom);
-    const inBottom = Math.round(core.inputEl.getBoundingClientRect().bottom);
-    if (Math.abs(inBottom - lastBottom) > 6) errs.push('bco02: tools not bottom aligned: ' + lastBottom + ' vs ' + inBottom);
-    core.inputEl.value = '';
-    core.autoGrow(core.inputEl);
-    await sleep(100);
-    if (rowsOf() !== 1) errs.push('bco02: clearing should give one row again, got ' + rowsOf());
     """)
     # Right-click on the microphone opens the quick voice settings menu.
     failed += ar_probe('bvq01', 'voice input: right-click on the microphone opens the quick settings menu', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: false } };</script>\n', r"""
