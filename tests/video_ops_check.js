@@ -843,6 +843,8 @@ async function exportIdleCheck() {
     $: (id) => byId[id], t: (k) => `<${k}>`,
     invoke: (cmd) => { calls.push(cmd); return Promise.resolve(); },
     closeWindow: () => calls.push("closeWindow"),
+    // The real one lives in videoExport.js (covered by video_export_cancel_check.js).
+    requestExportCancel: () => { if (sb.VE.exporting) calls.push("cancel_export"); },
   };
   vm.createContext(sb);
   vm.runInContext([

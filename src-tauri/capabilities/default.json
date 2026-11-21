@@ -364,6 +364,7 @@
     "allow-estimate-export-size",
     "allow-cancel-export",
     "allow-cancel-export-job",
+    "allow-clear-export-cancel",
     "allow-save-recording-as",
     "allow-pick-export-folder",
     "allow-save-recording-now",

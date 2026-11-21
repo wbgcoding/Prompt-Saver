@@ -1180,6 +1180,7 @@ pub fn run() {
             video_editor::export_recordings_batch,
             video_editor::estimate_export_size,
             video_editor::cancel_export,
+            video_editor::clear_export_cancel,
             video_editor::cancel_export_job,
             media_files::save_recording_as,
             media_files::pick_export_folder,

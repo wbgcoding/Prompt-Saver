@@ -858,6 +858,10 @@ pub(crate) static EXPORTS_CANCEL_EPOCH: AtomicU64 = AtomicU64::new(0);
 // The generation of the export the video editor itself has in flight (0 = none), so its
 // Cancel hits exactly that one and not a batch export's.
 pub(crate) static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+// A Stop that reached the backend while the editor's export had not registered its generation
+// yet (it is still validating its request). The export consumes it right after registering and
+// ends as cancelled; the editor clears a stale one before it starts the next export.
+pub(crate) static EDITOR_CANCEL_PENDING: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     use std::sync::OnceLock;
@@ -1105,17 +1109,41 @@ pub(crate) fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, D
 }
 
 // The editor's Cancel: cancels the export the editor itself started, never a batch job that
-// reserved a later generation. Nothing in flight leaves no stale entry behind.
-pub(crate) fn cancel_editor_export_in(editor_gen: &AtomicU64) {
+// reserved a later generation. With no export registered yet the Stop is kept as pending, so an
+// export that is still starting up ends as soon as it registers. The pending mark is set before
+// the generation is read: a start-up that registers in between consumes it, one that registered
+// before is cancelled directly.
+pub(crate) fn cancel_editor_export_in(editor_gen: &AtomicU64, pending: &AtomicBool) {
+    pending.store(true, Ordering::SeqCst);
     let gen = editor_gen.load(Ordering::SeqCst);
     if gen != 0 {
         video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+        pending.store(false, Ordering::SeqCst);
+    }
+}
+
+// The editor's export registers its generation here; a Stop that arrived earlier cancels it.
+pub(crate) fn register_editor_export_in(editor_gen: &AtomicU64, pending: &AtomicBool, my_gen: u64) {
+    editor_gen.store(my_gen, Ordering::SeqCst);
+    if pending.swap(false, Ordering::SeqCst) {
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(my_gen);
     }
 }
 
 #[tauri::command]
 pub(crate) fn cancel_export() {
-    cancel_editor_export_in(&EDITOR_EXPORT_GEN);
+    cancel_editor_export_in(&EDITOR_EXPORT_GEN, &EDITOR_CANCEL_PENDING);
+}
+
+// Drops a Stop left over from an earlier run (one that found nothing to cancel). The editor
+// awaits this before it sends the export, so it never clears a Stop already in flight with it.
+pub(crate) fn clear_editor_cancel_in(pending: &AtomicBool) {
+    pending.store(false, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub(crate) fn clear_export_cancel() {
+    clear_editor_cancel_in(&EDITOR_CANCEL_PENDING);
 }
 
 // Per-row cancel of the batch list: targets one job by the generation in its bg-ops id
@@ -1258,7 +1286,7 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     validate_export_request_graphs(&src, &req.media_paths, &graphs)?;
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-    EDITOR_EXPORT_GEN.store(my_gen, Ordering::SeqCst);
+    register_editor_export_in(&EDITOR_EXPORT_GEN, &EDITOR_CANCEL_PENDING, my_gen);
     // Own registry key per job so a batch shows one row per export; "export" stays the kind the
     // frontend groups and labels by.
     let id = format!("export-{my_gen}");

@@ -268,6 +268,11 @@ export async function startExport(toClipboard) {
           if (!proceed) { clearExportStatus(); return; }
         }
       }
+      // A Stop that found no export in the backend is kept there for the export that follows.
+      // One left over from an earlier run is dropped first, in its own call that is finished
+      // before the export is sent, so it can never wipe a Stop that is already on its way with
+      // this run. A Stop that came in during this call is caught by the check right after.
+      await invoke("clear_export_cancel").catch(() => {});
       if (stoppedBeforeStart()) return;
       try {
         // The backend lands the file on a free name when the requested one is

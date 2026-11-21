@@ -1219,18 +1219,104 @@ fn export_video_cancelling_an_earlier_generation_does_not_cancel_a_later_one() {
 #[test]
 fn editor_cancel_targets_the_editor_generation_not_a_later_batch_one() {
     let editor_gen = AtomicU64::new(0);
-    cancel_editor_export_in(&editor_gen);
+    let pending = AtomicBool::new(false);
+    cancel_editor_export_in(&editor_gen, &pending);
     let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     editor_gen.store(gen_a, Ordering::SeqCst);
     let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     assert!(!video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&gen_a));
-    cancel_editor_export_in(&editor_gen);
+    cancel_editor_export_in(&editor_gen, &pending);
     let set = video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner());
     assert!(set.contains(&gen_a), "the editor's own export must be cancelled");
     assert!(!set.contains(&gen_b), "a batch job must not be cancelled by the editor");
     assert!(!set.contains(&0), "no export in flight leaves nothing behind");
     drop(set);
     video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
+}
+
+// A Stop that lands while the editor's export is still validating (no generation registered
+// yet) used to find nothing and vanish, so the export ran to the end. It is now kept as pending
+// and the export, right after registering its generation, ends as cancelled.
+#[test]
+fn a_stop_before_the_export_registers_its_generation_cancels_it_on_registering() {
+    let editor_gen = AtomicU64::new(0);
+    let pending = AtomicBool::new(false);
+    cancel_editor_export_in(&editor_gen, &pending);
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    let is_cancelled = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen);
+    assert!(!is_cancelled(), "nothing was running, so nothing is cancelled yet");
+    register_editor_export_in(&editor_gen, &pending, my_gen);
+    assert!(is_cancelled(), "the export that registers after a Stop must report as cancelled");
+    assert!(!pending.load(Ordering::SeqCst), "the pending Stop is consumed by that export");
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
+}
+
+// The same Stop reaches the real cancel check of a running export: with the pending Stop
+// consumed, export_video_blocking returns "cancelled" and leaves no file.
+#[test]
+fn export_video_real_ffmpeg_a_stop_pending_at_registration_ends_the_export_cancelled() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-exporttest-pendingstop-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 8, "960x720");
+    let dest = dir.join("out.mp4");
+    let req = ExportRequest {
+        src_path: src.to_string_lossy().to_string(),
+        dest_path: dest.to_string_lossy().to_string(),
+        filter_chain: None,
+        audio_map: None,
+        media_paths: Vec::new(),
+        lossless_copy: false,
+        copy_audio: CopyAudio::All,
+        lossless_quality: false,
+        format: "mp4".to_string(),
+        video_kbps: Some(4000),
+        trim_start_ms: None,
+        trim_end_ms: None,
+        total_ms: 60_000,
+    };
+    let editor_gen = AtomicU64::new(0);
+    let pending = AtomicBool::new(false);
+    cancel_editor_export_in(&editor_gen, &pending);
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    register_editor_export_in(&editor_gen, &pending, my_gen);
+    let result = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {});
+    assert_eq!(result, Err("cancelled".to_string()));
+    assert!(!dest.exists(), "a cancelled export must leave no destination file");
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A Stop that found no export and was followed by none (the editor closed the dialog, say) must
+// not cancel the next export: the editor clears it first through clear_export_cancel.
+#[test]
+fn a_pending_stop_with_no_export_following_is_cleared_before_the_next_start() {
+    let editor_gen = AtomicU64::new(0);
+    let pending = AtomicBool::new(false);
+    cancel_editor_export_in(&editor_gen, &pending);
+    assert!(pending.load(Ordering::SeqCst), "a Stop with nothing registered is kept");
+    clear_editor_cancel_in(&pending);
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    register_editor_export_in(&editor_gen, &pending, my_gen);
+    assert!(
+        !video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen),
+        "a cleared Stop must not cancel the next export"
+    );
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
+}
+
+// A Stop that hits a running export cancels it directly and leaves no pending mark that would
+// cancel a later export.
+#[test]
+fn a_stop_during_a_running_export_leaves_no_pending_mark() {
+    let editor_gen = AtomicU64::new(0);
+    let pending = AtomicBool::new(false);
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    register_editor_export_in(&editor_gen, &pending, my_gen);
+    cancel_editor_export_in(&editor_gen, &pending);
+    assert!(video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen));
+    assert!(!pending.load(Ordering::SeqCst));
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
 }
 
 // cancel_all_bg_ops used to call plain cancel_export(), which only ever

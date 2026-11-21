@@ -26,6 +26,7 @@
     "allow-cancel-export",
     "allow-cancel-ffmpeg-download",
     "allow-check-export-disk-space",
+    "allow-clear-export-cancel",
     "allow-clip-export-path",
     "allow-copy-file-to-clipboard",
     "allow-copy-text",

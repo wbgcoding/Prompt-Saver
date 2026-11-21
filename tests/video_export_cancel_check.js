@@ -155,6 +155,44 @@ const exportCalls = (sb) => sb.calls.filter((c) => c === "export_video").length;
     running.resolve("C:/out/a.mp4");
     await run;
   }
+  {
+    // A stale Stop is cleared by its own call, finished before the export is sent (never a
+    // parameter of export_video, which would wipe a Stop already in flight with the same call).
+    const sb = sandbox();
+    await sb.startExport(false);
+    check("the stale-Stop clear runs before the export", sb.calls.indexOf("clear_export_cancel") !== -1 && sb.calls.indexOf("clear_export_cancel") < sb.calls.indexOf("export_video"), true);
+    check("the clear is its own call, once per attempt", sb.calls.filter((c) => c === "clear_export_cancel").length, 1);
+  }
+  {
+    // The export waits for the clear to finish: it is not sent while the clear is pending.
+    const clearing = deferred();
+    const sb = sandbox({ invoke: async (cmd) => { sb.calls.push(cmd); return cmd === "clear_export_cancel" ? clearing.promise : null; } });
+    const run = sb.startExport(false);
+    await tick();
+    check("no export is sent while the clear is pending", exportCalls(sb), 0);
+    clearing.resolve(null);
+    await run;
+    check("the export is sent once the clear finished", exportCalls(sb), 1);
+  }
+  {
+    // A Stop that arrives while the clear is still running ends the run as a cancel.
+    const clearing = deferred();
+    const sb = sandbox({ invoke: async (cmd) => { sb.calls.push(cmd); return cmd === "clear_export_cancel" ? clearing.promise : null; } });
+    const run = sb.startExport(false);
+    await tick();
+    sb.requestExportCancel();
+    clearing.resolve(null);
+    await run;
+    check("Stop during the clear: no export started", exportCalls(sb), 0);
+    check("Stop during the clear: reads as cancelled", sb.els["ve-export-status"].textContent, "veExportCancelled");
+    check("Stop during the clear: run is over", sb.VE.exporting, false);
+  }
+  {
+    // A failing clear never blocks the export.
+    const sb = sandbox({ invoke: async (cmd) => { sb.calls.push(cmd); if (cmd === "clear_export_cancel") throw "boom"; return null; } });
+    await sb.startExport(false);
+    check("a failed clear still lets the export run", exportCalls(sb), 1);
+  }
   for (const p of problems) console.log("FAIL", p);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
   process.exit(problems.length ? 1 : 0);
