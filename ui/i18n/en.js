@@ -200,6 +200,7 @@ export default {
     voiceErrBusy: "Voice input is already running.",
     voiceErrFailed: "Voice input could not start. Check your microphone and Windows microphone privacy settings, then try again.",
     voiceWhisperNoModel: "No speech model is downloaded. Download one in the voice settings, or switch voice input back to Windows.",
+    voiceWhisperCpu: "Whisper needs a processor with AVX2. This PC does not have it.",
     voiceErrNothingHeard: "Nothing was heard. Dictation uses the Windows default microphone: {mic}.",
     voiceOpenSoundSettings: "Sound settings",
     voiceErrNetwork: "Speech recognition could not reach the online service. Check the internet connection.",

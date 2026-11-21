@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke import boots, composer, findings, logic, main_walk, manager_view, side_windows, video, video_edit
+from smoke import boots, composer, findings, logic, main_walk, manager_view, side_windows, video, video_edit, whisper
 from smoke.harness import REPO, HERE, CHROME_CANDIDATES, install_manifest_recorder
 
 # Run order: the single boots come before the video expert boot, the generated findings last.
@@ -41,6 +41,7 @@ SUITES = (
     ("composer", composer.run),
     ("manager_view", manager_view.run),
     ("findings", findings.run),
+    ("whisper", whisper.run),
 )
 
 # Ids reused before probes had to be unique. New probes take a fresh id.

@@ -27,6 +27,8 @@ pub(crate) struct WhisperCatalog {
     pub(crate) profile: SystemProfile,
     pub(crate) vad_downloaded: bool,
     pub(crate) downloading: bool,
+    // False on a processor without AVX2: the engine cannot run there.
+    pub(crate) supported: bool,
 }
 
 pub(crate) fn build_catalog(dir: Option<&Path>, profile: SystemProfile) -> WhisperCatalog {
@@ -44,6 +46,7 @@ pub(crate) fn build_catalog(dir: Option<&Path>, profile: SystemProfile) -> Whisp
     WhisperCatalog {
         models,
         recommended: recommend(&profile),
+        supported: whisper_supported(&profile),
         profile,
         vad_downloaded: dir.is_some_and(vad_downloaded),
         downloading: WHISPER_DOWNLOAD_RUNNING.load(Ordering::SeqCst),

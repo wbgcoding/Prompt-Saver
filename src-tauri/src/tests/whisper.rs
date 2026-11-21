@@ -536,3 +536,26 @@ fn only_the_first_download_switches_the_engine() {
     assert_eq!(engine_after_download(false, Some("windows")), None);
     assert_eq!(VOICE_ENGINE_KEY, "voiceEngine");
 }
+
+// ---- processor guard ----
+
+#[test]
+fn a_pc_without_avx2_is_refused_and_no_engine_is_constructed() {
+    let loads = Cell::new(0u32);
+    let fake_engine = || {
+        loads.set(loads.get() + 1);
+        Ok("engine")
+    };
+    let refused = load_if_supported(&profile(16, 32, false), fake_engine);
+    assert_eq!(refused, Err("voice-whisper-cpu".to_string()));
+    assert_eq!(loads.get(), 0, "ggml must not be touched on a processor without AVX2");
+    assert_eq!(load_if_supported(&profile(16, 32, true), fake_engine), Ok("engine"));
+    assert_eq!(loads.get(), 1);
+}
+
+#[test]
+fn the_catalog_reports_whether_the_engine_can_run_here() {
+    assert!(!build_catalog(None, profile(16, 32, false)).supported);
+    assert!(build_catalog(None, profile(16, 32, true)).supported);
+    assert_eq!(VOICE_ERR_CPU, "voice-whisper-cpu");
+}

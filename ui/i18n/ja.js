@@ -223,6 +223,7 @@ export default {
     voiceErrBusy: "音声入力は既に実行中です。",
     voiceErrFailed: "音声入力を開始できませんでした。マイクと Windows のマイクのプライバシー設定を確認してから、もう一度お試しください。",
     voiceWhisperNoModel: "音声モデルがダウンロードされていません。音声設定でダウンロードするか、音声入力を Windows に戻してください。",
+    voiceWhisperCpu: "Whisper には AVX2 対応のプロセッサが必要です。この PC は対応していません。",
     voiceErrNothingHeard: "何も聞き取れませんでした。音声入力は Windows の既定のマイクを使用します: {mic}。",
     voiceOpenSoundSettings: "サウンド設定",
     voiceErrNetwork: "音声認識がオンラインサービスに接続できませんでした。インターネット接続を確認してください。",

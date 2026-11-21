@@ -172,6 +172,10 @@ fn start_whisper(
     #[cfg(feature = "whisper")]
     {
         use crate::whisper_engine::{real, resolved_lang_tag, SessionArgs, SessionConfig, SESSION_POLL};
+        // Before anything else: nothing of the engine may run on a processor it would crash.
+        if !whisper_supported(&system_profile()) {
+            return release(VOICE_ERR_CPU);
+        }
         let (chosen, mic_id, ui_lang) = {
             let g = lock(state);
             let text = |k: &str| g.settings.ui_texts.get(k).cloned().unwrap_or_default();

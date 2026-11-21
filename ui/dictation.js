@@ -639,6 +639,7 @@ export function routeVoiceError(err) {
     "voice-busy": "voiceErrBusy",
     "voice-failed": "voiceErrFailed",
     "voice-whisper-no-model": "voiceWhisperNoModel",
+    "voice-whisper-cpu": "voiceWhisperCpu",
     "voice-network": "voiceErrNetwork",
     "voice-mic": "voiceErrMic",
     "voice-audio": "voiceErrAudio",
@@ -756,6 +757,9 @@ export function bindDictation() {
     const payload = e.payload || {};
     if (!voiceEventIsMine(payload)) return; // a late partial is ignored, not delivered
     resolveVoiceArming();
+    // An empty partial is only a sign of life (the local engine sends one when the microphone
+    // opens): it inserts nothing, not even a joining space, unless it clears a live partial.
+    if (!payload.text && !voiceInterim) return;
     insertVoiceText(payload.text || "", true);
   });
   listen("voice-text", (e) => {

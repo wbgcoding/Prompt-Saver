@@ -61,6 +61,13 @@ ALLOW = {
         '"{raw}" is relative to a drive; give the full path with a backslash after the drive letter',
         "could not open the restored store", "could not write the restored store",
     ],
+    "raw reason of a failed model download, shown inside the mapped download-failed text": [
+        "download: {e}", "delete: {e}", "read: {e}", "write: {e}", "target dir: {e}",
+        "target dir: no per-user folder", "no per-user folder", "model path",
+    ],
+    "test hook for transcribing a WAV file, only the test suites call it": [
+        "voice-whisper-no-model", "wav-invalid", "wav-too-large", "wav-unsupported",
+    ],
     "demo mode switch, a rare setup failure the Expert menu shows as the generic message": [
         "could not prepare the demo store",
     ],

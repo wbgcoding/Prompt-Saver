@@ -223,6 +223,7 @@ export default {
     voiceErrBusy: "Introducerea vocală este deja în curs.",
     voiceErrFailed: "Introducerea vocală nu a putut fi pornită. Verifică microfonul și setările de confidențialitate pentru microfon din Windows, apoi încearcă din nou.",
     voiceWhisperNoModel: "Nu este descărcat niciun model vocal. Descarcă unul în setările vocale sau revino la introducerea vocală din Windows.",
+    voiceWhisperCpu: "Whisper necesită un procesor cu AVX2. Acest PC nu îl are.",
     voiceErrNothingHeard: "Nu s-a auzit nimic. Introducerea vocală folosește microfonul implicit din Windows: {mic}.",
     voiceOpenSoundSettings: "Setări de sunet",
     voiceErrNetwork: "Recunoașterea vocală nu a putut ajunge la serviciul online. Verifică conexiunea la internet.",

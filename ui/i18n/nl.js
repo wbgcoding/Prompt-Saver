@@ -223,6 +223,7 @@ export default {
     voiceErrBusy: "Spraakinvoer is al actief.",
     voiceErrFailed: "Spraakinvoer kon niet worden gestart. Controleer je microfoon en de Windows-privacyinstellingen voor de microfoon en probeer het daarna opnieuw.",
     voiceWhisperNoModel: "Er is geen spraakmodel gedownload. Download er een in de spraakinstellingen of zet spraakinvoer terug op Windows.",
+    voiceWhisperCpu: "Whisper heeft een processor met AVX2 nodig. Deze pc heeft die niet.",
     voiceErrNothingHeard: "Er is niets gehoord. Spraakinvoer gebruikt de standaardmicrofoon van Windows: {mic}.",
     voiceOpenSoundSettings: "Geluidsinstellingen",
     voiceErrNetwork: "De spraakherkenning kon de onlineservice niet bereiken. Controleer de internetverbinding.",

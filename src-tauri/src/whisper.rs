@@ -203,6 +203,23 @@ pub(crate) fn system_profile() -> SystemProfile {
     })
 }
 
+// ggml is built without native CPU tuning, which still needs AVX2; on a processor without it
+// the first compute kernel would hit an illegal instruction and take the app down.
+pub(crate) fn whisper_supported(p: &SystemProfile) -> bool {
+    p.avx2
+}
+
+// Runs `load` (the first thing that touches ggml) only on a supported PC; otherwise it is never
+// called and the start is refused with the CPU code.
+#[cfg_attr(not(feature = "whisper"), allow(dead_code))]
+pub(crate) fn load_if_supported<T>(p: &SystemProfile, load: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    if whisper_supported(p) {
+        load()
+    } else {
+        Err(VOICE_ERR_CPU.to_string())
+    }
+}
+
 // The model that suits a PC, from measured speed (seconds of work per second of audio, host
 // with 20 physical cores): base 0.07 at 10 threads and 0.10 at 4; small 0.20 at 10 and 0.32 to
 // 0.37 at 4; large-v3-turbo about 1.0 at 10 and 1.6 to 2.0 at 4, so no PC reaches a comfortable
@@ -269,6 +286,8 @@ pub(crate) const WHISPER_ERR_TOO_LARGE: &str = "whisper-too-large";
 pub(crate) const WHISPER_ERR_DAMAGED: &str = "whisper-damaged";
 pub(crate) const WHISPER_ERR_INSECURE: &str = "whisper-insecure-url";
 pub(crate) const WHISPER_ERR_CANCELLED: &str = "cancelled";
+// The code a dictation start is refused with on a processor without AVX2.
+pub(crate) const VOICE_ERR_CPU: &str = "voice-whisper-cpu";
 
 // Removes a model's file (and a stale partial download of it) unless `active` names it.
 pub(crate) fn delete_model_in(dir: &Path, model: &WhisperModel, active: &Mutex<Option<String>>) -> Result<(), String> {

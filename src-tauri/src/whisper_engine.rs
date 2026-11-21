@@ -385,7 +385,7 @@ pub(crate) mod real {
 
     // The model from the cache (loaded on first use) and a transcriber with its own working state.
     fn build_engine(model: &'static WhisperModel, dir: &Path, abort: Arc<AtomicBool>) -> Result<Box<dyn Transcribe + Send>, String> {
-        let ctx = CACHE.acquire(model.id, || load(&dir.join(model.asset.file)))?;
+        let ctx = load_if_supported(&system_profile(), || CACHE.acquire(model.id, || load(&dir.join(model.asset.file))))?;
         let state = ctx.create_state().map_err(|e| e.to_string())?;
         let vad = vad_downloaded(dir).then(|| dir.join(WHISPER_VAD.file).to_string_lossy().into_owned());
         let threads = engine_threads(system_profile().physical_cores);
@@ -409,6 +409,10 @@ pub(crate) mod real {
         if crate::audio::spawn_capture("dictation", eCapture, false, mic_id.to_string(), queue.clone(), cap_stop.clone()).is_err() {
             return fail("voice-mic");
         }
+        // The window shows "listening" on the first event of a session; this engine says nothing
+        // until a phrase is transcribed, so the open microphone announces itself with an empty
+        // partial (the window inserts nothing for it).
+        let _ = a.app.emit("voice-partial", VoiceTextEvent { id: a.id, token: a.token, text: String::new() });
         let abort = Arc::new(AtomicBool::new(false));
         let engine = match build_engine(model, &dir, abort.clone()) {
             Ok(e) => e,

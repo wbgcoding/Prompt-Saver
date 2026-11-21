@@ -223,6 +223,7 @@ export default {
     voiceErrBusy: "A entrada de voz já está em execução.",
     voiceErrFailed: "Não foi possível iniciar a entrada de voz. Verifique o microfone e as configurações de privacidade do microfone do Windows e tente novamente.",
     voiceWhisperNoModel: "Nenhum modelo de voz foi transferido. Transfira um nas definições de voz ou volte a usar a entrada de voz do Windows.",
+    voiceWhisperCpu: "O Whisper precisa de um processador com AVX2. Este PC não tem.",
     voiceErrNothingHeard: "Nada foi ouvido. A entrada de voz usa o microfone predefinido do Windows: {mic}.",
     voiceOpenSoundSettings: "Configurações de som",
     voiceErrNetwork: "O reconhecimento de voz não conseguiu alcançar o serviço online. Verifica a ligação à Internet.",
