@@ -264,6 +264,11 @@ async function openPopover(kind) {
   if (req !== openReq) return; // a newer openPopover() call already won
   const token = ++seq;
   const el = kind === "menu" ? menuEl : popEl;
+  // A close of the other popover still in its fade returns at its token check without hiding
+  // it, so hide it here: an invisible menu or grid left over this one would take its clicks.
+  const other = kind === "menu" ? popEl : menuEl;
+  other.classList.remove("shown");
+  other.classList.add("hidden");
   el.classList.remove("hidden");
   // Drawn after the popover is displayed: the name fitting measures text, which a hidden box cannot do.
   if (kind === "grid") renderGrid();

@@ -692,6 +692,7 @@ section(() => {
   const sb = {
     kind: "recordings",
     selected: new Set(),
+    discarding: new Set(),
     settings: {},
     byName: () => ({}),
     invoke: async (cmd, args) => {
@@ -718,6 +719,13 @@ section(() => {
     failMove = false;
     await sb.d(["a.mp4"]);
     check(toasts.includes("mmDeletedUndo"), "a successful move announces itself with the undo toast");
+    calls.length = 0;
+    toasts.length = 0;
+    await Promise.all([sb.d(["b.mp4"]), sb.d(["b.mp4"])]);
+    check(calls.filter(([c]) => c === "media_discard").length === 1, "a second delete of the same file while the first runs is not sent");
+    check(!toasts.includes("mmDeleteFailed"), "the undo notice is not replaced by a failure notice");
+    await sb.d(["b.mp4"]);
+    check(calls.filter(([c]) => c === "media_discard").length === 2, "once the first delete ended the name can be sent again");
     calls.length = 0;
     await sb.r(["rec-a.mp4"], false);
     answer = false;

@@ -291,6 +291,13 @@ export async function commitPromptHotkeyDirect(id, accel) {
   if (!saved) throw "save-failed";
   p.hotkey = saved.hotkey;
   p.hotkey_paste = saved.hotkey_paste;
+  // The editor open on this prompt stages its own copy; without this its Save would write the
+  // old shortcut back over the one just set here.
+  if (modalState?.id === id) {
+    modalState.hotkey = saved.hotkey || "";
+    modalState.hotkeyPaste = saved.hotkey_paste || "";
+    renderPromptHotkey();
+  }
   if (accel && !saved.hotkey) toast(t("promptHotkeyFail")); // OS refused between check and save
   renderHotkeysList();
   return saved.hotkey;

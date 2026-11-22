@@ -717,20 +717,29 @@ async function deleteNow(name) {
 
 // ---------------------------------------------------------------- actions
 
+// Names a discard is moving right now: a double click or a held Delete key must not send them
+// again, or the second call moves nothing and its failure notice replaces the undo notice.
+const discarding = new Set();
+
 async function discardNames(names) {
-  names = names.filter((n) => byName(n));
+  names = names.filter((n) => byName(n) && !discarding.has(n));
   if (!names.length) return;
   const asked = kind;
   let moved;
+  for (const n of names) discarding.add(n);
   try {
-    [moved] = await invoke("media_discard", { kind, names });
-  } catch (err) {
-    errToast(err);
-    return;
+    try {
+      [moved] = await invoke("media_discard", { kind, names });
+    } catch (err) {
+      errToast(err);
+      return;
+    }
+    if (asked !== kind) return;
+    for (const n of names) selected.delete(n);
+    await loadList({ keepSelection: true });
+  } finally {
+    for (const n of names) discarding.delete(n);
   }
-  if (asked !== kind) return;
-  for (const n of names) selected.delete(n);
-  await loadList({ keepSelection: true });
   if (moved < names.length) toast(t("mmDeleteFailed"));
   if (moved <= 0) return;
   const undoMs = Number(settings?.ui_values?.undoToastMs ?? UNDO_TOAST_FALLBACK_MS);

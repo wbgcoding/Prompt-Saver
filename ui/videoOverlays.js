@@ -292,12 +292,14 @@ document.addEventListener("pointerdown", (e) => {
   closeAddVideoPop();
 });
 
-function showClipPositionMenu(picked, x, y) {
+function showClipPositionMenu(picked, x, y, gen) {
+  // A choice made after another recording loaded would land in that one.
+  const add = (where) => { closeAddVideoPop(); if (VE.loadGen === gen) createClip(picked, where); };
   addVideoPop.innerHTML = "";
   addVideoPop.append(
-    menuButton(t("veClipAtStart"), () => { closeAddVideoPop(); createClip(picked, "start"); }),
-    menuButton(t("veClipAtEnd"), () => { closeAddVideoPop(); createClip(picked, "end"); }),
-    menuButton(t("veClipAtCut"), () => { closeAddVideoPop(); createClip(picked, "cut"); }),
+    menuButton(t("veClipAtStart"), () => add("start")),
+    menuButton(t("veClipAtEnd"), () => add("end")),
+    menuButton(t("veClipAtCut"), () => add("cut")),
   );
   placePopoverAt(addVideoPop, x, y);
 }
@@ -310,12 +312,13 @@ function showClipPositionMenu(picked, x, y) {
 // otherwise freeze raw i18n keys into the toast and popup.
 export async function startAddVideo(x, y) {
   if (!TXT_READY) await textsReady;
+  const gen = VE.loadGen;
   const picked = await pickExtraVideo();
-  if (!picked) return;
+  if (!picked || VE.loadGen !== gen) return;
   addVideoPop.innerHTML = "";
   addVideoPop.append(
-    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); createVideoOverlay(picked); }, "ve-add-video-as-overlay"),
-    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y); }, "ve-add-video-as-clip"),
+    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); if (VE.loadGen === gen) createVideoOverlay(picked); }, "ve-add-video-as-overlay"),
+    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y, gen); }, "ve-add-video-as-clip"),
   );
   placePopoverAt(addVideoPop, x, y);
 }
