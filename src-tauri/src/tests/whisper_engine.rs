@@ -278,6 +278,40 @@ fn engine_placeholders_for_no_speech_become_empty_text() {
 }
 
 #[test]
+fn a_noise_tag_next_to_speech_takes_only_itself_away() {
+    assert_eq!(clean_text("(clears throat) Sentence one. Sentence two. [Music]"), "Sentence one. Sentence two.");
+    assert_eq!(clean_text("[Musik] [Applaus] Hallo zusammen."), "Hallo zusammen.");
+    assert_eq!(clean_text("*lacht* Okay."), "Okay.");
+    assert_eq!(clean_text("Ja, (sehr) gut. Danke"), "Ja, (sehr) gut. Danke");
+}
+
+#[test]
+fn the_audio_window_fits_the_phrase_with_a_margin() {
+    // One step is 20 ms; the margin is 64 steps; never below 384 steps.
+    assert_eq!(fitted_audio_ctx(0), 384);
+    assert_eq!(fitted_audio_ctx(16_000), 384);
+    assert_eq!(fitted_audio_ctx(320 * 320), 384);
+    assert_eq!(fitted_audio_ctx(320 * 321), 385);
+    assert_eq!(fitted_audio_ctx(320 * 321 + 1), 386);
+    assert_eq!(fitted_audio_ctx(10 * 16_000), 500 + 64);
+    // Never wider than the engine's own 30 s window.
+    assert_eq!(fitted_audio_ctx(29 * 16_000), FULL_AUDIO_CTX);
+    assert_eq!(fitted_audio_ctx(usize::MAX), FULL_AUDIO_CTX);
+}
+
+#[test]
+fn a_sparse_loud_frame_still_counts_as_talking() {
+    let mut seg = Segmenter::new();
+    seg.push(&quiet(2.0));
+    // One loud frame early in a 100 ms piece, the rest of it quiet.
+    let piece = cat(&[tone(0.03, 0.3), quiet(0.07)]);
+    seg.push(&piece);
+    assert!(seg.speaking());
+    seg.push(&quiet(0.1));
+    assert!(!seg.speaking());
+}
+
+#[test]
 fn threads_follow_the_physical_cores_up_to_eight() {
     assert_eq!(engine_threads(0), 1);
     assert_eq!(engine_threads(1), 1);
@@ -848,17 +882,28 @@ fn voice_activity_detection_is_set_up_without_a_panic() {
 
 type Log = Arc<Mutex<Vec<(&'static str, String)>>>;
 
-// Answers a preview with `preview` and a finished phrase with `last`.
+// Answers a preview with `preview` and a finished phrase with `last`; the preview-style pass
+// that follows a final pass (the retry of an empty one) answers `retry`.
 struct Previewing {
     preview: &'static str,
     last: &'static str,
+    retry: &'static str,
+    after_final: bool,
+}
+
+fn previewing(preview: &'static str, last: &'static str, retry: &'static str) -> Previewing {
+    Previewing { preview, last, retry, after_final: false }
 }
 
 impl Transcribe for Previewing {
     fn transcribe(&mut self, _: &[f32], _: Option<&str>) -> Result<String, String> {
+        self.after_final = self.last.is_empty();
         Ok(self.last.to_string())
     }
     fn transcribe_cancellable(&mut self, _: &[f32], _: Option<&str>, _: &Arc<AtomicBool>) -> Result<String, String> {
+        if std::mem::take(&mut self.after_final) {
+            return Ok(self.retry.to_string());
+        }
         Ok(self.preview.to_string())
     }
 }
@@ -883,7 +928,7 @@ fn run_with_previews(clip: Vec<f32>, engine: Previewing, interim: bool) -> (Sess
     };
     let mut cfg = config(0, 600);
     cfg.interim = interim;
-    let outcome = run_pipeline_with(&cfg, Box::new(engine), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), on_text, Some(on_partial));
+    let outcome = run_pipeline_with(&cfg, Box::new(engine), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), on_text, LiveHooks { partial: Some(on_partial), ..Default::default() });
     let out = log.lock().unwrap().clone();
     (outcome, out)
 }
@@ -891,7 +936,7 @@ fn run_with_previews(clip: Vec<f32>, engine: Previewing, interim: bool) -> (Sess
 #[test]
 fn a_preview_shows_while_speaking_and_the_final_text_follows_once() {
     let clip = cat(&[quiet(0.5), talk(4.0), quiet(1.0)]);
-    let (outcome, log) = run_with_previews(clip, Previewing { preview: "so far", last: "all of it" }, true);
+    let (outcome, log) = run_with_previews(clip, previewing("so far", "all of it", "unused"), true);
     assert_eq!(outcome.phrases, 1);
     let finals: Vec<usize> = log.iter().enumerate().filter(|(_, e)| e.0 == "text").map(|(i, _)| i).collect();
     assert_eq!(finals.len(), 1, "{log:?}");
@@ -905,18 +950,36 @@ fn a_preview_shows_while_speaking_and_the_final_text_follows_once() {
 #[test]
 fn without_the_setting_there_is_no_preview() {
     let clip = cat(&[quiet(0.5), talk(4.0), quiet(1.0)]);
-    let (_, log) = run_with_previews(clip, Previewing { preview: "so far", last: "all of it" }, false);
+    let (_, log) = run_with_previews(clip, previewing("so far", "all of it", "unused"), false);
     assert_eq!(log, vec![("text", "all of it".to_string())]);
 }
 
 #[test]
 fn a_preview_whose_phrase_holds_no_text_is_cleared() {
     let clip = cat(&[quiet(0.5), talk(3.0), quiet(1.0)]);
-    let (outcome, log) = run_with_previews(clip, Previewing { preview: "noise words", last: "" }, true);
+    let (outcome, log) = run_with_previews(clip, previewing("noise words", "", ""), true);
     assert_eq!(outcome.phrases, 0);
     assert!(log.iter().any(|e| e.1 == "noise words"), "fixture: no preview shown: {log:?}");
     assert_eq!(log.last(), Some(&("partial", String::new())), "{log:?}");
     assert!(log.iter().all(|e| e.0 != "text"));
+}
+
+#[test]
+fn an_empty_final_pass_after_a_shown_preview_is_tried_once_more() {
+    let clip = cat(&[quiet(0.5), talk(3.0), quiet(1.0)]);
+    let (outcome, log) = run_with_previews(clip, previewing("half a sen", "", "half a sentence"), true);
+    assert_eq!(outcome.phrases, 1);
+    let texts: Vec<&str> = log.iter().filter(|e| e.0 == "text").map(|e| e.1.as_str()).collect();
+    assert_eq!(texts, ["half a sentence"], "{log:?}");
+}
+
+#[test]
+fn an_empty_final_pass_without_a_preview_is_not_tried_again() {
+    let clip = cat(&[quiet(0.5), talk(3.0), quiet(1.0)]);
+    // Previews off: nothing was shown, so an empty phrase stays empty.
+    let (outcome, log) = run_with_previews(clip, previewing("unused", "", "should not appear"), false);
+    assert_eq!(outcome.phrases, 0);
+    assert!(log.is_empty(), "{log:?}");
 }
 
 #[test]
@@ -940,4 +1003,35 @@ fn what_arrived_just_before_a_manual_stop_is_still_transcribed() {
     let outcome = run_pipeline(&config(0, 600), Box::new(Numbered { calls: Arc::default(), fail: false }), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), sink);
     assert_eq!(outcome.reason, "manual");
     assert_eq!(*texts.lock().unwrap(), vec!["phrase 1".to_string()]);
+}
+
+// Takes its time over every phrase, like a big model on a slow computer.
+struct Slow;
+
+impl Transcribe for Slow {
+    fn transcribe(&mut self, _: &[f32], _: Option<&str>) -> Result<String, String> {
+        std::thread::sleep(Duration::from_millis(1500));
+        Ok("late text".to_string())
+    }
+}
+
+#[test]
+fn the_end_of_listening_is_reported_before_the_last_phrase_is_written() {
+    let (_tx, rx) = mpsc::channel::<&'static str>();
+    let log: Log = Arc::default();
+    let (l1, l2) = (log.clone(), log.clone());
+    let on_text: TextSink = Arc::new(move |t| l1.lock().unwrap().push(("text", t)));
+    let ended: Box<dyn Fn(&'static str) + Send> = Box::new(move |r| l2.lock().unwrap().push(("ended", r.to_string())));
+    let started = Instant::now();
+    let clip = cat(&[quiet(0.3), talk(1.0)]);
+    let mut q: VecDeque<Vec<f32>> = clip.chunks(1600).map(|c| c.to_vec()).collect();
+    // After the speech the microphone only delivers silence, until the pause limit ends it.
+    let mut feed = move || -> Result<Vec<f32>, &'static str> { Ok(q.pop_front().unwrap_or_else(|| quiet(0.1))) };
+    let hooks = LiveHooks { listening_ended: Some(ended), ..Default::default() };
+    let outcome = run_pipeline_with(&config(1, 600), Box::new(Slow), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), on_text, hooks);
+    assert_eq!(outcome.reason, "silence");
+    assert_eq!(outcome.phrases, 1);
+    let log = log.lock().unwrap().clone();
+    assert_eq!(log, vec![("ended", "silence".to_string()), ("text", "late text".to_string())]);
+    assert!(started.elapsed() < Duration::from_secs(10));
 }

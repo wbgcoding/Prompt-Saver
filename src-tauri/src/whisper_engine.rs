@@ -188,6 +188,14 @@ enum Job {
 
 pub(crate) type TextSink = Arc<dyn Fn(String) + Send + Sync>;
 
+// What a live session reports besides the final text: the preview of the phrase being spoken,
+// and the moment listening ends (with its reason), before the queued phrases are written out.
+#[derive(Default)]
+pub(crate) struct LiveHooks {
+    pub(crate) partial: Option<TextSink>,
+    pub(crate) listening_ended: Option<Box<dyn Fn(&'static str) + Send>>,
+}
+
 // The session without a live preview; see run_pipeline_with.
 #[cfg(test)]
 pub(crate) fn run_pipeline(
@@ -198,7 +206,7 @@ pub(crate) fn run_pipeline(
     abort: &Arc<AtomicBool>,
     on_text: TextSink,
 ) -> SessionOutcome {
-    run_pipeline_with(cfg, engine, pull, stop_rx, abort, on_text, None)
+    run_pipeline_with(cfg, engine, pull, stop_rx, abort, on_text, LiveHooks::default())
 }
 
 // The session proper. `pull` hands over the 16 kHz mono samples that arrived since its last
@@ -221,8 +229,9 @@ pub(crate) fn run_pipeline_with(
     stop_rx: &mpsc::Receiver<&'static str>,
     abort: &Arc<AtomicBool>,
     on_text: TextSink,
-    on_partial: Option<TextSink>,
+    hooks: LiveHooks,
 ) -> SessionOutcome {
+    let on_partial = hooks.partial;
     let (job_tx, job_rx) = mpsc::channel::<Job>();
     let (err_tx, err_rx) = mpsc::channel::<&'static str>();
     let heard = Arc::new(AtomicU32::new(0));
@@ -254,7 +263,16 @@ pub(crate) fn run_pipeline_with(
                 }
                 Job::Final(phrase) => match engine.transcribe(&phrase, lang) {
                     Ok(raw) => {
-                        let text = clean_text(&raw);
+                        let mut text = clean_text(&raw);
+                        // The person saw words for this phrase, so an empty final pass is the
+                        // engine's mistake (its voice filter can drop a short sentence whole):
+                        // one more pass the way the preview read it, so the sentence is not lost.
+                        if text.is_empty() && preview_shown && !w_abort.load(Ordering::SeqCst) {
+                            let keep = Arc::new(AtomicBool::new(false));
+                            if let Ok(again) = engine.transcribe_cancellable(&phrase, lang, &keep) {
+                                text = clean_text(&again);
+                            }
+                        }
                         let aborted = w_abort.load(Ordering::SeqCst);
                         if !aborted && !text.is_empty() {
                             w_heard.fetch_add(1, Ordering::SeqCst);
@@ -337,6 +355,9 @@ pub(crate) fn run_pipeline_with(
             break r;
         }
     };
+    if let Some(ended) = &hooks.listening_ended {
+        ended(reason);
+    }
 
     if matches!(reason, "manual" | "silence" | "max") {
         // What arrived since the last poll belongs to the session too (a manual stop breaks the
@@ -453,6 +474,18 @@ pub(crate) mod real {
         }
     }
 
+    // What one engine pass watches: the session's abort and, for a preview, its own cancel flag.
+    struct AbortWatch {
+        session: Arc<AtomicBool>,
+        cancel: Option<Arc<AtomicBool>>,
+    }
+
+    unsafe extern "C" fn should_abort(user_data: *mut std::ffi::c_void) -> bool {
+        // SAFETY: user_data is the AbortWatch that `run` keeps alive for the whole pass.
+        let w = unsafe { &*(user_data as *const AbortWatch) };
+        w.session.load(Ordering::Relaxed) || w.cancel.as_ref().is_some_and(|c| c.load(Ordering::Relaxed))
+    }
+
     impl WhisperTranscriber {
         // One pass of the engine; it stops early on the session's abort or on `cancel`.
         fn run(&mut self, samples: &[f32], lang: Option<&str>, cancel: Option<Arc<AtomicBool>>) -> Result<String, String> {
@@ -466,15 +499,22 @@ pub(crate) mod real {
             params.set_print_progress(false);
             params.set_print_realtime(false);
             params.set_print_timestamps(false);
-            if let Some(vad) = &self.vad {
+            params.set_no_timestamps(true);
+            let preview = cancel.is_some();
+            if preview {
+                params.set_single_segment(true);
+            } else if let Some(vad) = &self.vad {
                 apply_vad(&mut params, vad);
             }
-            // The library keeps the closure's box for good (one small allocation per phrase). The
-            // box type is spelled out because the library reads the pointer back as exactly that.
-            let flag = self.abort.clone();
-            let watch: Box<dyn FnMut() -> bool> =
-                Box::new(move || flag.load(Ordering::Relaxed) || cancel.as_ref().is_some_and(|c| c.load(Ordering::Relaxed)));
-            params.set_abort_callback_safe::<Option<Box<dyn FnMut() -> bool>>, Box<dyn FnMut() -> bool>>(Some(watch));
+            // The engine asks the watch whether to stop. The watch lives on this stack frame and the
+            // engine only calls it inside `full` below, so nothing is allocated or kept per pass.
+            let watch = AbortWatch { session: self.abort.clone(), cancel };
+            // SAFETY: the pointer is read only by `should_abort`, only during `self.state.full`,
+            // which returns before `watch` goes out of scope.
+            unsafe {
+                params.set_abort_callback(Some(should_abort));
+                params.set_abort_callback_user_data(std::ptr::from_ref(&watch).cast_mut().cast());
+            }
             let padded;
             let audio: &[f32] = if samples.len() < MIN_SAMPLES {
                 let mut v = samples.to_vec();
@@ -484,6 +524,7 @@ pub(crate) mod real {
             } else {
                 samples
             };
+            params.set_audio_ctx(fitted_audio_ctx(audio.len()));
             self.state.full(params, audio).map_err(|e| e.to_string())?;
             let mut text = String::new();
             for segment in self.state.as_iter() {
@@ -501,7 +542,7 @@ pub(crate) mod real {
     }
 
     // The model from the cache (loaded on first use) and a transcriber with its own working state.
-    fn build_engine(model: &'static WhisperModel, dir: &Path, abort: Arc<AtomicBool>) -> Result<Box<dyn Transcribe + Send>, String> {
+    pub(crate) fn build_engine(model: &'static WhisperModel, dir: &Path, abort: Arc<AtomicBool>) -> Result<Box<dyn Transcribe + Send>, String> {
         let ctx = load_if_supported(&system_profile(), || CACHE.acquire(model.id, || load(&dir.join(model.asset.file))))?;
         let state = ctx.create_state().map_err(|e| e.to_string())?;
         let vad = vad_downloaded(dir).then(|| dir.join(WHISPER_VAD.file).to_string_lossy().into_owned());
@@ -582,7 +623,14 @@ pub(crate) mod real {
         let on_partial: TextSink = Arc::new(move |text| {
             let _ = app.emit("voice-partial", VoiceTextEvent { id, token, text });
         });
-        run_pipeline_with(cfg, engine, &mut pull, &a.stop_rx, &abort, on_text, Some(on_partial))
+        // The chime sounds the moment listening ends on its own, not once the last phrase is out.
+        let listening_ended: Box<dyn Fn(&'static str) + Send> = Box::new(|reason| {
+            if crate::stop_tone::is_automatic_stop(reason) {
+                crate::stop_tone::play_stop_chime();
+            }
+        });
+        let hooks = LiveHooks { partial: Some(on_partial), listening_ended: Some(listening_ended) };
+        run_pipeline_with(cfg, engine, &mut pull, &a.stop_rx, &abort, on_text, hooks)
     }
 
     // Sets the capture thread's stop flag when dropped.
@@ -632,7 +680,7 @@ pub(crate) mod real {
             started.elapsed().as_millis()
         ));
         a.ended.store(true, Ordering::SeqCst);
-        crate::voice::emit_end(&a.app, a.id, a.token, outcome.reason, error, a.mic_name.as_deref());
+        crate::voice::emit_end_events(&a.app, a.id, a.token, outcome.reason, error, a.mic_name.as_deref());
     }
 
     // A WAV file through the live pipeline, for the test hook.

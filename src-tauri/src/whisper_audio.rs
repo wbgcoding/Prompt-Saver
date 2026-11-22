@@ -86,7 +86,8 @@ pub(crate) struct Segmenter {
     speech_frames: usize,
     trailing_silence: usize,
     levels: VecDeque<f32>,
-    last_frame_loud: bool,
+    // Whether any frame of the most recent push was loud.
+    loud_in_push: bool,
 }
 
 impl Segmenter {
@@ -100,13 +101,15 @@ impl Segmenter {
             speech_frames: 0,
             trailing_silence: 0,
             levels: std::iter::repeat_n(SPEECH_FLOOR_RMS / NOISE_MARGIN, FLOOR_WINDOW_FRAMES).collect(),
-            last_frame_loud: false,
+            loud_in_push: false,
         }
     }
 
-    // Whether the most recent frame was loud: the session's idle clock restarts while it is true.
+    // Whether the most recent push held speech: the session's idle clock restarts while it is
+    // true. Any loud frame counts, so on a noisy line, where loud frames are sparse, a person
+    // still talking is not taken for a pause.
     pub(crate) fn speaking(&self) -> bool {
-        self.last_frame_loud
+        self.loud_in_push
     }
 
     // The phrase being spoken right now, once it holds enough speech to be worth a preview.
@@ -116,6 +119,7 @@ impl Segmenter {
 
     pub(crate) fn push(&mut self, samples: &[f32]) -> Vec<Vec<f32>> {
         let mut done = Vec::new();
+        self.loud_in_push = false;
         self.pending.extend_from_slice(samples);
         while self.pending.len() >= FRAME {
             let frame: Vec<f32> = self.pending.drain(..FRAME).collect();
@@ -142,7 +146,7 @@ impl Segmenter {
             self.levels.pop_front();
         }
         let loud = rms > SPEECH_FLOOR_RMS.max(floor * NOISE_MARGIN);
-        self.last_frame_loud = loud;
+        self.loud_in_push |= loud;
         if !loud && !self.in_phrase {
             // Quiet and between phrases: keep the lead-in.
             self.pre_roll.push_back((frame, rms));
@@ -219,6 +223,18 @@ impl Segmenter {
     }
 }
 
+// The engine's audio window, in its 20 ms steps, fitted to a phrase instead of the full 30 s it
+// pads every input to: the encoder's work shrinks with it, so a short phrase is done several
+// times faster. A margin keeps the end of the phrase well inside the window. A very small window
+// makes the engine repeat or invent words on a short phrase over a noisy line, so it never goes
+// below about 7.7 s, which costs nothing measurable.
+pub(crate) const FULL_AUDIO_CTX: i32 = 1500;
+pub(crate) const MIN_AUDIO_CTX: i32 = 384;
+pub(crate) fn fitted_audio_ctx(samples: usize) -> i32 {
+    let steps = samples.div_ceil(320) + 64;
+    i32::try_from(steps).unwrap_or(FULL_AUDIO_CTX).clamp(MIN_AUDIO_CTX, FULL_AUDIO_CTX)
+}
+
 // What the engine does with one phrase; the real one wraps whisper.cpp, tests use a fake.
 pub(crate) trait Transcribe {
     fn transcribe(&mut self, samples: &[f32], lang: Option<&str>) -> Result<String, String>;
@@ -250,15 +266,31 @@ pub(crate) fn transcribe_samples(t: &mut dyn Transcribe, mono16k: &[f32], lang: 
     Ok(out)
 }
 
-// Engine output to the text that is inserted: trimmed, and empty for the placeholder the engine
-// prints for audio with no speech ("[BLANK_AUDIO]", "(silence)", "*music*").
+// Engine output to the text that is inserted: trimmed, without the tags the engine writes for
+// sounds that are not speech ("[BLANK_AUDIO]", "(silence)", "*music*"). A tag at either end goes
+// and the speech next to it stays ("(clears throat) Hello there." keeps "Hello there."); words in
+// brackets inside a sentence are dictated text and stay.
 pub(crate) fn clean_text(raw: &str) -> String {
-    let t = raw.trim();
-    let wrapped = |open: char, close: char| t.len() > 1 && t.starts_with(open) && t.ends_with(close);
-    if wrapped('[', ']') || wrapped('(', ')') || wrapped('*', '*') || wrapped('\u{266a}', '\u{266a}') {
-        return String::new();
+    const PAIRS: [(char, char); 4] = [('[', ']'), ('(', ')'), ('*', '*'), ('\u{266a}', '\u{266a}')];
+    let mut t = raw.trim();
+    loop {
+        let before = t;
+        for (open, close) in PAIRS {
+            if let Some(rest) = t.strip_prefix(open) {
+                if let Some(j) = rest.find(close) {
+                    t = rest[j + close.len_utf8()..].trim_start();
+                }
+            }
+            if let Some(rest) = t.strip_suffix(close) {
+                if let Some(j) = rest.rfind(open) {
+                    t = rest[..j].trim_end();
+                }
+            }
+        }
+        if t == before {
+            return t.to_string();
+        }
     }
-    t.to_string()
 }
 
 // The engine's language codes.
