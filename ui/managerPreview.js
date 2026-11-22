@@ -133,7 +133,7 @@ export function createPreview(ctx) {
 
   stageEl.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || zoom.s <= 1.001 || !onMediaSurface(e)) return;
-    zoom.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: zoom.x, oy: zoom.y, active: false };
+    zoom.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, active: false };
   });
   stageEl.addEventListener("pointermove", (e) => {
     const d = zoom.drag;
@@ -145,8 +145,11 @@ export function createPreview(ctx) {
       d.active = true;
       try { stageEl.setPointerCapture(e.pointerId); } catch (_) { /* pointer already gone */ }
     }
-    zoom.x = d.ox + dx;
-    zoom.y = d.oy + dy;
+    // Moves by what changed since the last event, so a zoom in the middle of a drag is kept.
+    zoom.x += e.clientX - d.lx;
+    zoom.y += e.clientY - d.ly;
+    d.lx = e.clientX;
+    d.ly = e.clientY;
     clampPan();
     paintZoom();
   });

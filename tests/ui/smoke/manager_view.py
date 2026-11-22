@@ -140,7 +140,14 @@ def run(browser, tmp):
     pointer('pointerdown', cx, cy);
     pointer('pointermove', cx - 40, cy - 30);
     pointer('pointermove', cx - 60, cy - 50);
-    pointer('pointerup', cx - 60, cy - 50);
+    // A wheel turn in the middle of the drag: the next move goes on from the new zoom.
+    wheel(100);
+    const mid = shift(img()), midScale = scaleOf(img());
+    pointer('pointermove', cx - 64, cy - 50);
+    const next = shift(img());
+    if (scaleOf(img()) !== midScale) errs.push('bmv06: moving after a wheel turn mid-drag changed the zoom');
+    if (Math.abs(next[0] - mid[0]) > 6 || Math.abs(next[1] - mid[1]) > 2) errs.push('bmv06: the picture jumped after a wheel turn mid-drag: ' + mid + ' -> ' + next);
+    pointer('pointerup', cx - 64, cy - 50);
     const after = shift(img());
     if (before[0] === after[0] && before[1] === after[1]) errs.push('bmv06: dragging did not move the zoomed picture');
     if (stage.classList.contains('panning')) errs.push('bmv06: the stage still shows the panning cursor after the drag');
