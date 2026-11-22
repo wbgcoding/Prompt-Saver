@@ -53,6 +53,8 @@ export function createPreview(ctx) {
     stageEl.classList.toggle("panning", !!(zoom.drag && zoom.drag.active));
     if (!el) return;
     el.style.transform = zoomed ? `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})` : "";
+    // The native control bar would scale off the stage with the picture: it is hidden while zoomed.
+    if (el instanceof HTMLVideoElement) el.controls = !zoomed;
   }
 
   function resetZoom() {
@@ -153,6 +155,11 @@ export function createPreview(ctx) {
     zoom.drag = null;
     paintZoom();
   };
+  // Without the native controls a zoomed video no longer toggles play on a click itself.
+  stageEl.addEventListener("click", (e) => {
+    const el = mediaEl();
+    if (zoom.s > 1.001 && el instanceof HTMLVideoElement && e.target === el) togglePlay();
+  });
   stageEl.addEventListener("pointerup", endDrag);
   stageEl.addEventListener("pointercancel", endDrag);
   window.addEventListener("resize", () => { if (zoom.s > 1.001) { clampPan(); paintZoom(); } });

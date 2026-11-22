@@ -185,4 +185,31 @@ def run(browser, tmp):
     const shot = [...tiles()].find((t) => /\d+×\d+/.test(t.querySelector('.mm-meta').textContent));
     if (shot && !/\d+×\d+/.test(shot.querySelectorAll('.mm-meta-line')[1].textContent)) errs.push('bmv07: the resolution is not on line 2');
     """)
+    # A zoomed video hides its native controls (they would scale off the stage) and shows them again at fit.
+    failed += ar_probe('bmv08', 'manager: a zoomed video hides its controls and gets them back at fit', 'manager', '880x600', '', BOOT + r"""
+    await kindReady('recordings');
+    const mp4 = [...tiles()].find((t) => t.dataset.name.endsWith('.mp4'));
+    mp4.click();
+    await until(() => document.querySelector('#mm-view-stage video'), 40);
+    const vid = () => document.querySelector('#mm-view-stage video');
+    const box = () => vid().getBoundingClientRect();
+    const cx = box().left + box().width / 2, cy = box().top + 40;
+    const wheel = (dy, y) => vid().dispatchEvent(new WheelEvent('wheel', { deltaY: dy, clientX: cx, clientY: y, bubbles: true, cancelable: true }));
+    if (!vid().controls) errs.push('bmv08: a video at fit has no controls');
+    wheel(-300, box().bottom - 10);
+    if (vid().style.transform) errs.push('bmv08: the wheel over the control bar zoomed the video');
+    wheel(-300, cy);
+    if (!/scale\(/.test(vid().style.transform || '')) errs.push('bmv08: the wheel did not zoom the video');
+    if (vid().controls) errs.push('bmv08: a zoomed video still shows its controls');
+    key('0', document.body);
+    if (vid().style.transform) errs.push('bmv08: key 0 did not restore fit');
+    if (!vid().controls) errs.push('bmv08: the controls did not come back at fit');
+    wheel(-300, cy);
+    if (vid().controls) errs.push('bmv08: controls shown after zooming again');
+    vid().dispatchEvent(new MouseEvent('dblclick', { clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    if (!vid().controls) errs.push('bmv08: double click back to fit left the controls off');
+    wheel(-300, cy);
+    document.getElementById('mm-view-next').click();
+    if (!vid() || !vid().controls) errs.push('bmv08: the next video has no controls after stepping from a zoomed one');
+    """)
     return failed
