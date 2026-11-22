@@ -26,8 +26,10 @@ saving, backups, recordings, the editors and the installer.
   online recognition, so no audio leaves the PC. "Recognition" in the Expert menu switches the engine,
   "Whisper models…" opens a manager that marks the model suited to your PC, asks once before a download,
   shows its progress and lets you switch between models or delete one. The first download turns the
-  local engine on. Text appears sentence by sentence after each pause, the microphone can be chosen,
-  and a processor without AVX2 is told so instead of failing.
+  local engine on. While you speak a preview of the sentence appears, which Whisper replaces with the
+  finished text after each pause; the microphone can be chosen, the microphone button's right-click
+  menu offers the engine, the microphone and the model manager too, and a processor without AVX2 is
+  told so instead of failing.
 - **French.** French is now available as a UI language, including the installer,
   the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice
@@ -42,6 +44,13 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Zoom in the manager's large view.** A screenshot or recording shown large can be zoomed with the
+  mouse wheel around the pointer and moved by dragging; a double-click switches between fit and
+  actual size, and the keys +, - and 0 do the same.
+- **Tidier tiles in the manager.** Under the file name each tile shows the date and time, and below
+  that the size and resolution, each on its own line, shortened instead of wrapped when too long.
+- **Dictation stops later and says so.** The pause before dictation stops by itself is now 30 seconds
+  by default and can be set up to 10 minutes; a short tone plays when it stops on its own.
 - **Readable notice after a window grew during recording.** The message is now short and uses the
   full width of its card, with the button on its own line below. Any message with a button stays
   20 seconds and never disappears while the pointer rests on it.
