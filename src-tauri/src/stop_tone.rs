@@ -6,7 +6,7 @@
 use std::f32::consts::TAU;
 
 const RATE: u32 = 44_100;
-// Two bell-like notes falling a fifth (G5, then C5), the second starting while the first rings out.
+// Two bell-like notes falling a fifth, the second starting while the first rings out.
 const NOTES: [(f32, f32); 2] = [(783.99, 0.0), (523.25, 0.13)];
 const LENGTH_SECS: f32 = 0.75;
 const PEAK: f32 = 0.22;
