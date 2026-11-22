@@ -113,4 +113,59 @@ def run(browser, tmp):
     if (!nextName.endsWith('.mp4')) errs.push('bmv05: the next file is ' + nextName + ', not a second mp4');
     if (plays < before + 1) errs.push('bmv05: stepping to a second mp4 did not call play()');
     """)
+    # Wheel zooms the picture around the cursor, drag pans it, double click and 0 restore it, stepping resets it.
+    failed += ar_probe('bmv06', 'manager: the large view zooms with the wheel, pans, and resets on double click and on stepping', 'manager', '880x600', '', BOOT + r"""
+    await kindReady('screenshots');
+    tiles()[0].click();
+    await until(() => document.querySelector('#mm-view-stage img'), 40);
+    const stage = document.getElementById('mm-view-stage');
+    const img = () => document.querySelector('#mm-view-stage img');
+    const scaleOf = (el) => { const m = /scale\(([0-9.]+)\)/.exec(el.style.transform || ''); return m ? parseFloat(m[1]) : 1; };
+    const shift = (el) => { const m = /translate\((-?[0-9.]+)px, (-?[0-9.]+)px\)/.exec(el.style.transform || ''); return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0, 0]; };
+    const r = img().getBoundingClientRect();
+    const cx = r.left + r.width * 0.75, cy = r.top + r.height * 0.5;
+    const wheel = (dy) => img().dispatchEvent(new WheelEvent('wheel', { deltaY: dy, clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    if (scaleOf(img()) !== 1) errs.push('bmv06: the picture starts zoomed');
+    wheel(-300);
+    const z1 = scaleOf(img());
+    if (!(z1 > 1.2)) errs.push('bmv06: wheel up did not zoom in, scale ' + z1);
+    if (!stage.classList.contains('zoomed')) errs.push('bmv06: the stage is not marked zoomed (grab cursor)');
+    wheel(-100000);
+    if (scaleOf(img()) > 8.0001) errs.push('bmv06: zoom went past 8x: ' + scaleOf(img()));
+    if (scaleOf(img()) < 7.9) errs.push('bmv06: zoom did not reach 8x: ' + scaleOf(img()));
+    wheel(100);
+    if (!(scaleOf(img()) < 8)) errs.push('bmv06: wheel down did not zoom out');
+    const before = shift(img());
+    const pointer = (type, x, y) => img().dispatchEvent(new PointerEvent(type, { pointerId: 7, button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    pointer('pointerdown', cx, cy);
+    pointer('pointermove', cx - 40, cy - 30);
+    pointer('pointermove', cx - 60, cy - 50);
+    pointer('pointerup', cx - 60, cy - 50);
+    const after = shift(img());
+    if (before[0] === after[0] && before[1] === after[1]) errs.push('bmv06: dragging did not move the zoomed picture');
+    if (stage.classList.contains('panning')) errs.push('bmv06: the stage still shows the panning cursor after the drag');
+    img().dispatchEvent(new MouseEvent('dblclick', { clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    if (scaleOf(img()) !== 1 || img().style.transform) errs.push('bmv06: double click did not restore fit, transform ' + img().style.transform);
+    img().dispatchEvent(new MouseEvent('dblclick', { clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    if (!(scaleOf(img()) >= 2)) errs.push('bmv06: double click at fit did not zoom in');
+    key('0', document.body);
+    if (scaleOf(img()) !== 1) errs.push('bmv06: key 0 did not restore fit');
+    key('+', document.body);
+    if (!(scaleOf(img()) > 1)) errs.push('bmv06: key + did not zoom in');
+    key('-', document.body);
+    if (scaleOf(img()) !== 1) errs.push('bmv06: key - did not zoom back out to fit');
+    wheel(-300);
+    if (!(scaleOf(img()) > 1)) errs.push('bmv06: could not zoom again before stepping');
+    const here = name();
+    key('ArrowRight', document.body);
+    await until(() => name() !== here && document.querySelector('#mm-view-stage img'), 60);
+    if (scaleOf(img()) !== 1 || img().style.transform) errs.push('bmv06: stepping kept the zoom, transform ' + img().style.transform);
+    if (stage.classList.contains('zoomed')) errs.push('bmv06: stepping kept the zoomed cursor');
+    wheel(-300);
+    key('Escape', document.body);
+    await sleep(100);
+    tiles()[0].click();
+    await until(() => document.querySelector('#mm-view-stage img'), 40);
+    if (scaleOf(img()) !== 1) errs.push('bmv06: reopening the view kept the zoom');
+    """)
     return failed

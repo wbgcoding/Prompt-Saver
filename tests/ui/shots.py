@@ -104,6 +104,7 @@ ACTS = {
     "shots": "window.__FIRE__('manager-kind', 'screenshots'); await sleep(1200);",
     "recs_view": "await sleep(1000); document.querySelectorAll('#mm-grid .mm-tile')[2]?.click(); await sleep(800);",
     "shots_view": "window.__FIRE__('manager-kind', 'screenshots'); await sleep(1200); document.querySelectorAll('#mm-grid .mm-tile')[1]?.click(); await sleep(800);",
+    "shots_view_zoom": "window.__FIRE__('manager-kind', 'screenshots'); await sleep(1200); document.querySelectorAll('#mm-grid .mm-tile')[1]?.click(); for (let i = 0; i < 20 && !document.querySelector('#mm-view-stage img'); i++) await sleep(50); const zi = document.querySelector('#mm-view-stage img'); if (zi) { const zr = zi.getBoundingClientRect(); zi.dispatchEvent(new WheelEvent('wheel', { deltaY: -700, clientX: zr.left + zr.width * 0.7, clientY: zr.top + zr.height * 0.4, bubbles: true, cancelable: true })); } await sleep(200);",
     "shots_off": "window.__MM_FILES__ = []; SETTINGS.ui_flags.screenshotSave = false; window.__FIRE__('manager-kind', 'screenshots'); await sleep(1000);",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
     **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "cut", "edit", "ov", "export", "keys")},
@@ -219,7 +220,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
-    "@manager": ["manager.html:recs", "manager.html:recs_sel", "manager.html:shots", "manager.html:shots_off", "manager.html:recs_view", "manager.html:shots_view"],
+    "@manager": ["manager.html:recs", "manager.html:recs_sel", "manager.html:shots", "manager.html:shots_off", "manager.html:recs_view", "manager.html:shots_view", "manager.html:shots_view_zoom"],
     "manager_shots": ["manager.html:shots"],
     "@snip": ["snipedit", "snip_edit_ocr", "snipdraw", "snipsel", "snipcrop", "sniptext", "sniptextsel"],
     "@composer": ["main", "composer_tall"],

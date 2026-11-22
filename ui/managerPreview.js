@@ -17,6 +17,146 @@ export function createPreview(ctx) {
   let lastAt = 0;       // grid position of the file on show, for moving on when it disappears
 
   const isOpen = () => !!current;
+
+  // ---- zoom and pan of the picture or video on show
+  // The media element carries `translate(x, y) scale(s)` around its own centre, which sits on the
+  // stage centre; the stage clips it. Scale 1 is "fit", so the range is fit up to ZOOM_MAX times.
+  const ZOOM_MAX = 8;
+  const CONTROL_BAR_PX = 56; // the native control bar at the bottom of a video, in unzoomed pixels
+  const PAN_START_PX = 3;    // a press that moves less than this stays a click (play/pause on a video)
+  const zoom = { s: 1, x: 0, y: 0, drag: null };
+  const stageEl = $("mm-view-stage");
+
+  const mediaEl = () => stageEl.querySelector(":scope > img, :scope > video");
+
+  // Size the media is drawn at when fitted (the video element fills the stage, its picture is letterboxed).
+  function fittedSize(el) {
+    if (el instanceof HTMLVideoElement && el.videoWidth > 0 && el.videoHeight > 0) {
+      const k = Math.min(el.offsetWidth / el.videoWidth, el.offsetHeight / el.videoHeight);
+      return { w: el.videoWidth * k, h: el.videoHeight * k };
+    }
+    return { w: el.offsetWidth, h: el.offsetHeight };
+  }
+
+  // Scale at which one media pixel is one screen pixel, never below 2 so the toggle always shows more.
+  function actualScale(el) {
+    const fit = fittedSize(el);
+    const nw = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
+    const k = nw > 0 && fit.w > 0 ? nw / fit.w : 0;
+    return Math.min(ZOOM_MAX, Math.max(2, k));
+  }
+
+  function paintZoom() {
+    const el = mediaEl();
+    const zoomed = zoom.s > 1.001;
+    stageEl.classList.toggle("zoomed", zoomed);
+    stageEl.classList.toggle("panning", !!(zoom.drag && zoom.drag.active));
+    if (!el) return;
+    el.style.transform = zoomed ? `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})` : "";
+  }
+
+  function resetZoom() {
+    zoom.s = 1;
+    zoom.x = 0;
+    zoom.y = 0;
+    zoom.drag = null;
+    paintZoom();
+  }
+
+  // Keeps the zoomed media covering the stage: it can be moved until its edge meets the stage edge.
+  function clampPan() {
+    const el = mediaEl();
+    if (!el) return;
+    const fit = fittedSize(el);
+    const limX = Math.max(0, (fit.w * zoom.s - stageEl.clientWidth) / 2);
+    const limY = Math.max(0, (fit.h * zoom.s - stageEl.clientHeight) / 2);
+    zoom.x = Math.min(limX, Math.max(-limX, zoom.x));
+    zoom.y = Math.min(limY, Math.max(-limY, zoom.y));
+  }
+
+  // Sets the scale so the point (cx, cy), in client coordinates, stays under the cursor.
+  function zoomTo(next, cx, cy) {
+    if (!mediaEl()) return;
+    const s = Math.min(ZOOM_MAX, Math.max(1, next));
+    if (s === zoom.s) return;
+    const r = stageEl.getBoundingClientRect();
+    const qx = cx - (r.left + r.width / 2);
+    const qy = cy - (r.top + r.height / 2);
+    const k = s / zoom.s;
+    zoom.x = qx - (qx - zoom.x) * k;
+    zoom.y = qy - (qy - zoom.y) * k;
+    zoom.s = s;
+    if (s <= 1.001) { zoom.s = 1; zoom.x = 0; zoom.y = 0; } else clampPan();
+    paintZoom();
+  }
+
+  function zoomAtCentre(next) {
+    const r = stageEl.getBoundingClientRect();
+    zoomTo(next, r.left + r.width / 2, r.top + r.height / 2);
+  }
+
+  // True when the pointer is on the media itself and not on a video's native control bar.
+  function onMediaSurface(e) {
+    const el = mediaEl();
+    if (!el || e.target !== el) return false;
+    if (el instanceof HTMLVideoElement && el.controls) {
+      const r = el.getBoundingClientRect();
+      const bar = CONTROL_BAR_PX * (r.height / Math.max(1, el.offsetHeight));
+      if (e.clientY > r.bottom - bar) return false;
+    }
+    return true;
+  }
+
+  function toggleActual(cx, cy) {
+    const el = mediaEl();
+    if (!el) return;
+    if (zoom.s > 1.001) zoomTo(1, cx, cy);
+    else zoomTo(actualScale(el), cx, cy);
+  }
+
+  stageEl.addEventListener("wheel", (e) => {
+    if (!onMediaSurface(e)) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    zoomTo(zoom.s * Math.exp(-e.deltaY * unit * 0.0015), e.clientX, e.clientY);
+  }, { passive: false });
+
+  // Capture phase: a double click on a video would otherwise reach its native full-screen toggle.
+  stageEl.addEventListener("dblclick", (e) => {
+    if (!onMediaSurface(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toggleActual(e.clientX, e.clientY);
+  }, true);
+
+  stageEl.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || zoom.s <= 1.001 || !onMediaSurface(e)) return;
+    zoom.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: zoom.x, oy: zoom.y, active: false };
+  });
+  stageEl.addEventListener("pointermove", (e) => {
+    const d = zoom.drag;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.active) {
+      if (Math.hypot(dx, dy) < PAN_START_PX) return;
+      d.active = true;
+      try { stageEl.setPointerCapture(e.pointerId); } catch (_) { /* pointer already gone */ }
+    }
+    zoom.x = d.ox + dx;
+    zoom.y = d.oy + dy;
+    clampPan();
+    paintZoom();
+  });
+  const endDrag = (e) => {
+    if (!zoom.drag || zoom.drag.id !== e.pointerId) return;
+    zoom.drag = null;
+    paintZoom();
+  };
+  stageEl.addEventListener("pointerup", endDrag);
+  stageEl.addEventListener("pointercancel", endDrag);
+  window.addEventListener("resize", () => { if (zoom.s > 1.001) { clampPan(); paintZoom(); } });
+
   const indexOf = (name) => ctx.view().findIndex((f) => f.name === name);
 
   function releaseStage() {
@@ -29,6 +169,7 @@ export function createPreview(ctx) {
     }
     stage.textContent = "";
     loadedKey = "";
+    resetZoom();
   }
 
   function message(text, f, withPlayer) {
@@ -209,6 +350,11 @@ export function createPreview(ctx) {
     if (e.key === "ArrowRight" && !onVideo) { step(1); return true; }
     if (e.key === "Enter" && !onButton) { ctx.actions.edit(current); return true; }
     if (e.key === " " && !onButton && !onVideo) return togglePlay();
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === "+" || e.key === "=") { zoomAtCentre(zoom.s * 1.5); return true; }
+      if (e.key === "-" || e.key === "_") { zoomAtCentre(zoom.s / 1.5); return true; }
+      if (e.key === "0") { zoomAtCentre(1); return true; }
+    }
     return false;
   }
 

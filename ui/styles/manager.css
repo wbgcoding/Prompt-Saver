@@ -259,6 +259,13 @@ body.mm-viewing .mm-footer { display: none !important; }
   background: #000;
 }
 .mm-view-stage > img { background: transparent; }
+.mm-view-stage > img,
+.mm-view-stage > video { transform-origin: 50% 50%; }
+.mm-view-stage.zoomed { touch-action: none; }
+.mm-view-stage.zoomed > img,
+.mm-view-stage.zoomed > video { cursor: grab; }
+.mm-view-stage.panning > img,
+.mm-view-stage.panning > video { cursor: grabbing; }
 .mm-view-stage > video { width: 100%; height: 100%; }
 .mm-view-msg {
   display: flex;
