@@ -355,7 +355,7 @@ export function createPreview(ctx) {
     if (e.key === "Escape" || (e.key === "Backspace" && !onButton)) { close(); return true; }
     if (e.key === "ArrowLeft" && !onVideo) { step(-1); return true; }
     if (e.key === "ArrowRight" && !onVideo) { step(1); return true; }
-    if (e.key === "Enter" && !onButton) { ctx.actions.edit(current); return true; }
+    if (e.key === "Enter" && !onButton) { pauseStage(); ctx.actions.edit(current); return true; }
     if (e.key === " " && !onButton && !onVideo) return togglePlay();
     if (!e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.key === "+" || e.key === "=") { zoomAtCentre(zoom.s * 1.5); return true; }
@@ -368,14 +368,18 @@ export function createPreview(ctx) {
   $("mm-view-back").addEventListener("click", close);
   $("mm-view-prev").addEventListener("click", () => step(-1));
   $("mm-view-next").addEventListener("click", () => step(1));
-  $("mm-view-edit").addEventListener("click", () => ctx.actions.edit(current));
+  // Anything that opens another window stops the large view's video first, so it does not
+  // play on behind it.
+  function pauseStage() {
+    $("mm-view-stage").querySelector("video")?.pause();
+  }
+  $("mm-view-edit").addEventListener("click", () => { pauseStage(); ctx.actions.edit(current); });
   $("mm-view-copy").addEventListener("click", () => ctx.actions.copy(current));
   $("mm-view-player").addEventListener("click", () => {
-    const v = $("mm-view-stage").querySelector("video");
-    if (v) v.pause();
+    pauseStage();
     ctx.actions.player(current);
   });
-  $("mm-view-export").addEventListener("click", () => ctx.actions.exportOne(current));
+  $("mm-view-export").addEventListener("click", () => { pauseStage(); ctx.actions.exportOne(current); });
   $("mm-view-reveal").addEventListener("click", () => ctx.actions.reveal(current));
   $("mm-view-del").addEventListener("click", discardCurrent);
 

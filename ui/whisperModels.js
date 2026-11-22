@@ -36,6 +36,8 @@ async function loadCatalog() {
     assignWhisperCatalogCache(catalog);
     loadFailed = false;
     if (catalog.downloading && !download) download = { id: "", done: 0, total: 0, cancelling: false };
+    // A placeholder for a download this window did not start goes once that download is over.
+    else if (!catalog.downloading && download && download.id === "") download = null;
   } catch (e) {
     loadFailed = true;
     errToast(e);
