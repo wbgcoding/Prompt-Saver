@@ -39,6 +39,7 @@ ALLOW = {
         "not a folder that can be removed", "the elevated script is too long for a command line",
         "unexpected PowerShell output shape", "invalid camera chunk",
         "ffmpeg-consent-missing", "unknown media kind", "unknown setting", "not-a-media-file",
+        "not a picked file",
     ],
     "cannot happen with a 32-byte key; refuses instead of storing an empty ciphertext": [
         "secret-seal-failed",

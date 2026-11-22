@@ -1348,3 +1348,17 @@ fn a_window_overhanging_the_primary_display_resolves_to_the_primary_display() {
     let (x, y, w, h) = (i64::from(x), i64::from(y), i64::from(w), i64::from(h));
     assert!(x <= 0 && y <= 0 && x + w > 0 && y + h > 0, "the display holding the origin, got {x},{y} {w}x{h}");
 }
+
+#[cfg(windows)]
+#[test]
+fn packed_24_bit_and_8_bit_samples_become_floats() {
+    use crate::audio::{int24_to_f32, uint8_to_f32};
+    let v = int24_to_f32(&[0, 0, 0, 0xff, 0xff, 0x7f, 0x01, 0x00, 0x80, 0xff, 0xff, 0xff, 9]);
+    assert_eq!(v.len(), 4, "a trailing partial sample is dropped");
+    assert_eq!(v[0], 0.0);
+    assert_eq!(v[1], 1.0);
+    assert!((v[2] + 1.0).abs() < 1e-6, "{}", v[2]);
+    assert!(v[3] < 0.0 && v[3] > -1e-6, "{}", v[3]);
+    let u = uint8_to_f32(&[128, 255, 1]);
+    assert_eq!(u, vec![0.0, 1.0, -1.0]);
+}

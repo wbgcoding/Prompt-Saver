@@ -1093,10 +1093,14 @@ fn install_hook() -> Option<HookHandle> {
 }
 
 fn uninstall_hook(hook: HookHandle) {
-    unsafe {
-        let _ = PostThreadMessageW(hook.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+    let deadline = Instant::now() + Duration::from_millis(STOP_JOIN_BOUND_MS);
+    while !hook.thread.is_finished() && Instant::now() < deadline {
+        unsafe {
+            let _ = PostThreadMessageW(hook.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+        thread::sleep(Duration::from_millis(20));
     }
-    let _ = hook.thread.join();
+    let _ = join_bounded(hook.thread, Duration::from_millis(20));
 }
 
 pub struct KeyCapture {

@@ -309,3 +309,15 @@ fn manager_handoff_returns_only_what_the_manager_stored_and_only_once() {
     h.put_open("b".to_string());
     assert_eq!(h.take_open(), Some("b".to_string()));
 }
+
+#[test]
+fn every_poster_write_gets_its_own_temp_file() {
+    let dest = std::path::Path::new("C:/posters/abc.jpg");
+    let a = crate::media_manager::poster_part_path(dest);
+    let b = crate::media_manager::poster_part_path(dest);
+    assert_ne!(a, b);
+    for p in [&a, &b] {
+        assert_eq!(p.parent(), dest.parent());
+        assert!(p.to_string_lossy().ends_with(".part"), "{}", p.display());
+    }
+}

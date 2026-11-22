@@ -1664,3 +1664,14 @@ fn voice_session_start_line_logs_mic_presence_never_the_name() {
     assert!(none.contains("mic_console=no") && none.contains("mic_communications=no"), "{none}");
     assert!(none.starts_with("session start lang=de-DE auto_stop_sec=0 max_sec=30 interim=false"), "{none}");
 }
+
+#[test]
+fn ocr_reads_only_a_file_picked_this_session() {
+    let p = std::env::temp_dir().join(format!("ocr_picked_gate_{}.png", std::process::id()));
+    std::fs::write(&p, b"not really a png").unwrap();
+    let raw = p.to_str().unwrap();
+    assert_eq!(ocr_picked_path(raw).unwrap_err(), "not a picked file");
+    crate::asset_scope::grant_picked_file(raw);
+    assert_eq!(ocr_picked_path(raw).unwrap(), p);
+    let _ = std::fs::remove_file(&p);
+}

@@ -73,7 +73,7 @@ pub(crate) fn grant_picked_file(raw: &str) {
     set.extend(picked_keys(raw));
 }
 
-fn is_picked_file(raw: &str) -> bool {
+pub(crate) fn is_picked_file(raw: &str) -> bool {
     let guard = PICKED.lock().unwrap_or_else(|e| e.into_inner());
     guard.as_ref().is_some_and(|set| picked_keys(raw).iter().any(|k| set.contains(k)))
 }
@@ -117,7 +117,7 @@ pub(crate) fn attachment_source_trusted(raw: &str, roots: &[PathBuf], stored: &H
 // to (data, recordings, screenshots, the export folder, its temp folder).
 pub(crate) fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf> {
     let text = |k: &str| settings.ui_texts.get(k).cloned().unwrap_or_default();
-    let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir(), None);
+    let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir(), crate::paths::portable_data_dir().as_deref());
     roots.push(crate::snip::screenshot_dir(&text("screenshotDir")));
     let export = text("videoExportDir");
     if !export.trim().is_empty() {

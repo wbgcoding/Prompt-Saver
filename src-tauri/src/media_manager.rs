@@ -214,6 +214,13 @@ fn poster_cache_file(src: &Path) -> Option<PathBuf> {
 
 // A 320 px wide JPG of a screenshot. Written beside its name and renamed, so a half-written
 // picture is never taken for a finished one.
+// A temp name of its own per write beside the poster, so two writes never share one file.
+pub(crate) fn poster_part_path(dest: &Path) -> PathBuf {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    dest.with_extension(format!("{}-{seq}.part", std::process::id()))
+}
+
 fn make_image_poster(src: &Path, dest: &Path) -> bool {
     let Some(img) = crate::images::decode_image_file(&src.to_string_lossy()) else { return false };
     let (w, h) = (img.width().max(1), img.height().max(1));
@@ -227,8 +234,12 @@ fn make_image_poster(src: &Path, dest: &Path) -> bool {
     if rgb.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 80)).is_err() {
         return false;
     }
-    let part = dest.with_extension("part");
-    fs::write(&part, bytes).is_ok() && fs::rename(&part, dest).is_ok()
+    let part = poster_part_path(dest);
+    let done = fs::write(&part, bytes).is_ok() && fs::rename(&part, dest).is_ok();
+    if !done {
+        let _ = fs::remove_file(&part);
+    }
+    done
 }
 
 // The moment a video poster is taken: a tenth of the clip, at most one second in, so a short

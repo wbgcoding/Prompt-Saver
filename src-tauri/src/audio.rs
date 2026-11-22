@@ -109,6 +109,21 @@ unsafe fn device_friendly_name(device: &IMMDevice) -> Option<String> {
 // Whether a captured packet adds to the timeline. A packet flagged silent may come with no data
 // pointer at all, and dropping it would cut that stretch of silence out of the track and shift
 // everything after it.
+// Packed little-endian 24-bit samples, as some USB and studio devices deliver them.
+pub(crate) fn int24_to_f32(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|b| (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 8) as f32 / 8_388_607.0)
+        .collect()
+}
+
+// Unsigned 8-bit samples, silence at 128.
+pub(crate) fn uint8_to_f32(bytes: &[u8]) -> Vec<f32> {
+    bytes.iter().map(|&b| (f32::from(b) - 128.0) / 127.0).collect()
+}
+
 pub(crate) fn packet_has_audio(has_data: bool, num_frames: u32, silent: bool) -> bool {
     num_frames > 0 && (silent || has_data)
 }
@@ -191,6 +206,10 @@ pub fn spawn_capture(
                                     .iter()
                                     .map(|&s| s as f32 / i16::MAX as f32)
                                     .collect()
+                            } else if in_bits == 24 {
+                                int24_to_f32(std::slice::from_raw_parts(data_ptr, n * 3))
+                            } else if in_bits == 8 {
+                                uint8_to_f32(std::slice::from_raw_parts(data_ptr, n))
                             } else {
                                 vec![0.0; n] // unsupported native format -- silence rather than garbage
                             };

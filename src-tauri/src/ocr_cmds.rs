@@ -195,6 +195,15 @@ pub(crate) fn winrt_file_path(path: &str) -> String {
     }
 }
 
+// The file a window asks to read: only one the user picked this session, so a window cannot read
+// the text out of any picture on the disk.
+pub(crate) fn ocr_picked_path(path: &str) -> Result<PathBuf, String> {
+    if !crate::asset_scope::is_picked_file(path) {
+        return Err("not a picked file".to_string());
+    }
+    ocr_validate_path(path)
+}
+
 pub(crate) fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
     // Text gate first: a UNC spelling is refused before the file system is asked anything.
     if is_network_path(path) {
@@ -406,7 +415,7 @@ pub(crate) async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
 // call (it holds the live values) instead of the backend re-reading them from Db state.
 #[tauri::command]
 pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
-    let validated = ocr_validate_path(&path)?;
+    let validated = ocr_picked_path(&path)?;
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
