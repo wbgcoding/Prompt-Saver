@@ -82,8 +82,8 @@ if errorlevel 1 (
 )
 
 rem The speech engine's bindings are generated with libclang. LIBCLANG_PATH names the folder holding
-rem libclang.dll; when it is unset the shared tools copy is used if it is there.
-if not defined LIBCLANG_PATH if exist "E:\Claude\.Tools\libclang\bin\libclang.dll" set "LIBCLANG_PATH=E:\Claude\.Tools\libclang\bin"
+rem libclang.dll; when it is unset, a copy in the project's own .tools folder is used if it is there.
+if not defined LIBCLANG_PATH if exist "%~dp0.tools\libclang\bin\libclang.dll" set "LIBCLANG_PATH=%~dp0.tools\libclang\bin"
 if not defined LIBCLANG_PATH (
     echo [ERROR] LIBCLANG_PATH is not set. Point it at the folder containing libclang.dll
     echo [ERROR] ^(an LLVM bin folder or a libclang wheel's native folder^) and build again.

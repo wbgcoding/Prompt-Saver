@@ -65,3 +65,6 @@ coverage/
 
 # Machine-local cargo settings (libclang path)
 /.cargo/
+
+# Local build tools (libclang for the speech engine bindings)
+.tools/
