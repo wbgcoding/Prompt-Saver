@@ -72,7 +72,7 @@ export function attachGridPicker(input, apply) {
   input.addEventListener("input", () => { if (popInput === input) renderNumPop(); });
   input.addEventListener("blur", () => { if (popInput === input) closeNumPop(true); });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") input.blur();
+    if (e.key === "Enter" && !e.isComposing) input.blur();
     else if (e.key === "Escape") closeNumPop(false);
   });
   input.addEventListener(
@@ -439,6 +439,9 @@ export function renderViews() {
 }
 
 export async function switchToView(id) {
+  // A get_state answer still on its way predates this switch: it must not put the old active
+  // view back over the settings set_active_view returns.
+  renderGridSeq++;
   try {
     assignSettings(await invoke("set_active_view", { id }));
   } catch (err) {
@@ -912,7 +915,7 @@ export function bindViews() {
   attachGridPicker(viewModal.cols, () => {});
   attachGridPicker(viewModal.rows, () => {});
   viewModal.name.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") confirmViewModal();
+    if (e.key === "Enter" && !e.isComposing) confirmViewModal();
   });
   viewModal.close.addEventListener("click", closeViewModal);
   viewModal.root.addEventListener("pointerdown", (e) => {

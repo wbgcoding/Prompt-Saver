@@ -209,6 +209,8 @@ export function wireTagInput() {
     closeTagSuggest();
   };
   input.addEventListener("keydown", (e) => {
+    // Keys that pick or confirm an IME candidate (Japanese, Chinese input) belong to the IME.
+    if (e.isComposing) return;
     const open = !tagSuggest.classList.contains("hidden");
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();

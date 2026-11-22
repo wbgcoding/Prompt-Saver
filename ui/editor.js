@@ -306,7 +306,7 @@ export function varFixedListRow() {
   };
   addBtn.addEventListener("click", commitAdd);
   for (const el of [addName, addValue]) {
-    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commitAdd(); } });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); commitAdd(); } });
   }
   addRow.append(addName, addValue, addBtn);
   wrap.appendChild(addRow);
@@ -1630,7 +1630,7 @@ export function bindEditor() {
     saveBtn.disabled = !inputEl.value.trim();
   });
   inputEl.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); startCreate(); }
+    if (e.ctrlKey && e.key === "Enter" && !e.isComposing) { e.preventDefault(); startCreate(); }
     // Escape ends a dictation session targeting this field, instead of
     // falling through to whatever the global Escape handler would otherwise do.
     if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === inputEl) {
@@ -1743,7 +1743,7 @@ export function bindEditor() {
   // Click the preview media → fullscreen zoom/pan viewer.
   modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
   modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
-  modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
+  modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) confirmModal(); });
   modal.text.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === modal.text) {
       e.stopPropagation();
@@ -2043,7 +2043,7 @@ export function wireEditor() {
   $("modal-var-add").addEventListener("click", insertHelperVar);
   for (const id of ["modal-var-name", "modal-var-opts"]) {
     $(id).addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
+      if (e.key !== "Enter" || e.isComposing) return;
       e.preventDefault(); // Enter here inserts, it must not submit the editor
       insertHelperVar();
     });

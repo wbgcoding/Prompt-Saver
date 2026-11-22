@@ -134,6 +134,7 @@ function setActive(i) {
 
 searchEl.addEventListener("input", render);
 document.addEventListener("keydown", (e) => {
+  if (e.isComposing) return; // the IME owns its own keys
   const rows = [...resultsEl.children];
   if (e.key === "Escape") { e.preventDefault(); close(); }
   else if (e.key === "ArrowDown") { e.preventDefault(); setActive(Math.min(active + 1, rows.length - 1)); }

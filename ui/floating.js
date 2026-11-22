@@ -695,7 +695,9 @@ window.addEventListener("keydown", async (e) => {
   if (e.key === "Escape") { closeMenu(); return; }
   // Moves the whole pill window like a mouse drag; the pill is a plain OS window with no
   // keyboard drag gesture otherwise.
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && !menuOpen && !resizing) {
+  // A focused slider or field (the media bar's seek and volume) keeps its own arrow keys.
+  const ownsArrows = e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]");
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && !menuOpen && !resizing && !ownsArrows) {
     e.preventDefault();
     const step = e.shiftKey ? 20 : 4;
     const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;

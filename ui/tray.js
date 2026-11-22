@@ -212,6 +212,7 @@ function onSearchInput() {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (e.isComposing) return; // the IME owns its own keys
   // Once the launcher has the typed text the rows are no longer in play: an Enter
   // that lands before the focus moves must not activate the first row (a favourite,
   // or Stop while a recording runs).

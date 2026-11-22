@@ -643,7 +643,7 @@ export function valueRow(key) {
     };
     input.addEventListener("change", commit);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); commit(); }
     });
     row.append(head, input, hint);
     return row;

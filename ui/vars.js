@@ -197,6 +197,7 @@ function fitOpenList(list) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (e.isComposing) return; // the IME owns its own keys
   if (e.key === "Escape") {
     e.preventDefault();
     // An open choice list closes first; only a second Escape cancels the form.

@@ -156,7 +156,7 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
     // The third choice is its own answer, never true and never the cancel answer.
     const onAlt = () => done("alt");
     const onBg = (e) => { if (e.target === root) finish(false); };
-    const onKey = (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); finish(true); } };
+    const onKey = (e) => { if (e.key === "Enter" && !e.isComposing && !ok.disabled) { e.preventDefault(); finish(true); } };
     const onEye = () => {
       if (input && input.copy) {
         field.select();

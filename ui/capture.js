@@ -982,6 +982,7 @@ export function bindCapture() {
   // Shared by all entry points (screenshot editor, composer screenshot, composer file) and the
   // ocr-captured event: one place decides "empty -> toast only" and "auto-copy -> copy now +
   // footer note".
+  let lastOcrText = "";
   function showOcrResult(result) {
     const text = (result?.text || "").trim();
     if (!text) {
@@ -989,7 +990,11 @@ export function bindCapture() {
       return;
     }
     const autoCopy = flag("ocrAutoCopy");
-    $("ocr-result-text").value = text;
+    const box = $("ocr-result-text");
+    // A result the user is still editing stays: the new text goes below it instead of over it.
+    const edited = !ocrModal.classList.contains("hidden") && box.value.trim() && box.value !== lastOcrText;
+    box.value = edited ? `${box.value.trimEnd()}\n\n${text}` : text;
+    lastOcrText = box.value;
     $("ocr-result-meta").textContent = `${result.lang || ""} · ${text.length}`;
     // The "already copied" note shows only once the copy really happened.
     $("ocr-autocopy-note").classList.add("hidden");

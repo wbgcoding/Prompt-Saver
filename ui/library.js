@@ -1601,13 +1601,20 @@ export function bindLibrary() {
     openCompareView([...libSelected]);
   });
   $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value, [...libSelected]));
-  $("lib-batch-delete").addEventListener("click", async () => {
+  $("lib-batch-delete").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const ids = [...libSelected];
     const n = ids.length;
-    if (!n) return;
-    const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-    if (await doBatch("delete", {}, ids)) {
-      undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+    // A second click while the first delete is still running would delete the same ids again.
+    if (!n || btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
+      if (await doBatch("delete", {}, ids)) {
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+      }
+    } finally {
+      btn.disabled = false;
     }
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
@@ -1635,13 +1642,20 @@ export function bindLibrary() {
   $("grid-batch-archive").addEventListener("click", () => batchArchive([...gridSelected], doGridBatch));
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
   $("grid-batch-export").addEventListener("click", () => batchExport($("grid-batch-format").value, [...gridSelected]));
-  $("grid-batch-delete").addEventListener("click", async () => {
+  $("grid-batch-delete").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const ids = [...gridSelected];
     const n = ids.length;
-    if (!n) return;
-    const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-    if (await doGridBatch("delete", {}, ids)) {
-      undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+    // A second click while the first delete is still running would delete the same ids again.
+    if (!n || btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
+      if (await doGridBatch("delete", {}, ids)) {
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+      }
+    } finally {
+      btn.disabled = false;
     }
   });
   document.addEventListener("keydown", (e) => {

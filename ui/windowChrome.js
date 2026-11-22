@@ -390,6 +390,7 @@ export function wireSearchSuggest(input, opts = {}) {
   input.addEventListener("pointerdown", show);
   input.addEventListener("input", show);
   input.addEventListener("keydown", (e) => {
+    if (e.isComposing) return; // the IME owns its own keys
     const rows = isOpen() ? pop.querySelectorAll(".search-suggest-item") : [];
     if (rows.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();

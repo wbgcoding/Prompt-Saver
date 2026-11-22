@@ -1957,7 +1957,7 @@ export function initSnipEditor() {
   window.addEventListener("resize", () => { if (SE.active) snipEditSetZoom(SE.zoom); });
 
   snipEditTextInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); snipEditCommitTextInput(); }
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); snipEditCommitTextInput(); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); snipEditCancelTextInput(); }
   });
   snipEditTextInput.addEventListener("input", snipEditFitTextInput);

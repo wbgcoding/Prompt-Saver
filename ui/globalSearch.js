@@ -1,7 +1,7 @@
 // Search everything overlay.
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { assignLibQuery, computeLibSearchScore, copyResolved, libQuery, toastCopied } from "./library.js";
-import { $, debounced, flag, gateOpen, invoke, optFlag, prompts, settings, t, val } from "./core.js";
+import { $, debounced, flag, gateOpen, invoke, modal, optFlag, prompts, settings, t, val } from "./core.js";
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
 import { varPreview } from "./floatShared.js";
@@ -446,6 +446,7 @@ export function bindGlobalSearch() {
   gsEl.addEventListener("pointerdown", (e) => { if (e.target === gsEl) closeGlobalSearch(); });
   $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderPending = true; gsRenderDebounced(); });
   $("gs-input").addEventListener("keydown", (e) => {
+    if (e.isComposing) return; // the IME owns its own keys
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGlobalSearch(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.min(gsActive + 1, gsFlatRows.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.max(gsActive - 1, 0)); }
@@ -458,6 +459,8 @@ export function bindGlobalSearch() {
   });
   document.addEventListener("keydown", (e) => {
     if (!flag("globalSearch")) return;
+    // An open editor may hold unsaved text; a search hit would act behind it.
+    if (!modal.root.classList.contains("hidden")) return;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
       toggleGlobalSearch();
