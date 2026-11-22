@@ -26,8 +26,8 @@ saving, backups, recordings, the editors and the installer.
   online recognition, so no audio leaves the PC. "Recognition" in the Expert menu switches the engine,
   "Whisper models…" opens a manager that marks the model suited to your PC, asks once before a download,
   shows its progress and lets you switch between models or delete one. The first download turns the
-  local engine on. While you speak a preview of the sentence appears, which Whisper replaces with the
-  finished text after each pause; the microphone can be chosen, the microphone button's right-click
+  local engine on. While you speak a preview of the sentence appears and grows about once a second,
+  and Whisper replaces it with the finished text a moment after each pause; the microphone can be chosen, the microphone button's right-click
   menu offers the engine, the microphone and the model manager too, and a processor without AVX2 is
   told so instead of failing.
 - **French.** French is now available as a UI language, including the installer,
@@ -50,7 +50,8 @@ saving, backups, recordings, the editors and the installer.
 - **Tidier tiles in the manager.** Under the file name each tile shows the date and time, and below
   that the size and resolution, each on its own line, shortened instead of wrapped when too long.
 - **Dictation stops later and says so.** The pause before dictation stops by itself is now 30 seconds
-  by default and can be set up to 10 minutes; a short tone plays when it stops on its own.
+  by default and can be set up to 10 minutes; a soft two-note chime plays the moment it stops
+  listening on its own.
 - **Readable notice after a window grew during recording.** The message is now short and uses the
   full width of its card, with the button on its own line below. Any message with a button stays
   20 seconds and never disappears while the pointer rests on it.
@@ -107,6 +108,19 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Typing with an input method.** Confirming a word with Enter in a Japanese, Chinese or Korean
+  input method no longer saves, submits or closes the field at the same time.
+- **Batch delete clicked twice.** Deleting the selected prompts in the library can no longer be
+  started a second time while the first run is still going.
+- **Text recognition keeps your edits.** A new result added to an open text recognition window you
+  had already edited is appended below your text instead of replacing it.
+- **Backup rotation.** When old automatic backups are removed, the oldest go first, also when
+  more than nine were taken within the same second.
+- **Moving the data folder.** A new data folder inside one of the current media folders is refused,
+  also when it already holds a library, since those folders are removed after the move.
+- **Microphones with 24-bit or 8-bit audio.** Recordings from such devices now carry their sound
+  instead of silence.
+- **Global search while editing.** Ctrl+K no longer opens the search over an open prompt editor.
 - **Updates on a standard account.** When Prompt Saver is installed for all users, a standard
   account no longer installs a second copy when it updates: the release page opens so the new
   setup can be run as administrator.
@@ -250,6 +264,8 @@ saving, backups, recordings, the editors and the installer.
 
 - **Portable mode** lets the app's windows read only its own media folders instead of the whole
   folder the exe sits in.
+- **Portable mode** also takes only those media folders as the source of attachments and imports.
+- **Text recognition of an image file** reads only a file you picked in the file dialog.
 - **Language pack installs** start the elevated PowerShell by its full path.
 - **Network paths** in imported prompts are never resolved while a prompt is saved.
 - **Confidential prompts** are checked against the vault on every copy path,
