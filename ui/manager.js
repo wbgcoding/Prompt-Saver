@@ -166,11 +166,28 @@ function fmtDuration(ms) {
 function totalSize(list) {
   return list.reduce((sum, f) => sum + f.size, 0);
 }
-function metaText(f) {
-  const parts = [fmtDate(f.modified_ms), fmtBytes(f.size, LANG)];
+// Line 1 of a tile: date and time. Line 2: size, plus the resolution once the probe has it.
+function metaLines(f) {
+  const detail = [fmtBytes(f.size, LANG)];
   const p = probeOf(f);
-  if (p && p.width > 0 && p.height > 0) parts.push(`${p.width}×${p.height}`);
-  return parts.join(" · ");
+  if (p && p.width > 0 && p.height > 0) detail.push(`${p.width}×${p.height}`);
+  return [fmtDate(f.modified_ms), detail.join(" · ")];
+}
+function metaText(f) {
+  return metaLines(f).join(" · ");
+}
+// Rewrites a tile's meta element as two single-line rows, each with its full text as tooltip.
+function paintMeta(el, f) {
+  const lines = metaLines(f);
+  while (el.children.length < lines.length) {
+    const row = document.createElement("div");
+    row.className = "mm-meta-line";
+    el.appendChild(row);
+  }
+  lines.forEach((text, i) => {
+    el.children[i].textContent = text;
+    el.children[i].title = text;
+  });
 }
 
 // ---------------------------------------------------------------- toast
@@ -392,7 +409,7 @@ function buildTile(f) {
   name.title = f.name;
   const meta = document.createElement("div");
   meta.className = "mm-meta";
-  meta.textContent = metaText(f);
+  paintMeta(meta, f);
   tile.append(thumb, name, meta);
   if (f.app) {
     const app = document.createElement("div");
@@ -609,7 +626,7 @@ function applyProbes(names) {
     const f = byName(name);
     const tile = f && tileOf(name);
     if (!tile) continue;
-    tile.querySelector(".mm-meta").textContent = metaText(f);
+    paintMeta(tile.querySelector(".mm-meta"), f);
     paintDuration(tile, f);
   }
 }

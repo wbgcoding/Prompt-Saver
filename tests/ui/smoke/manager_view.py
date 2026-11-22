@@ -168,4 +168,21 @@ def run(browser, tmp):
     await until(() => document.querySelector('#mm-view-stage img'), 40);
     if (scaleOf(img()) !== 1) errs.push('bmv06: reopening the view kept the zoom');
     """)
+    # A tile shows its date and its size and resolution as two single-line rows with the full text as tooltip.
+    failed += ar_probe('bmv07', 'manager: a tile shows two fixed meta lines, single line with a tooltip', 'manager', '880x600', '', BOOT + r"""
+    await kindReady('recordings');
+    await sleep(600);
+    const tile = tiles()[0];
+    const rows = tile.querySelectorAll('.mm-meta > .mm-meta-line');
+    if (rows.length !== 2) { errs.push('bmv07: expected 2 meta lines, found ' + rows.length); return; }
+    for (const row of rows) {
+      const cs = getComputedStyle(row);
+      if (cs.whiteSpace !== 'nowrap' || cs.textOverflow !== 'ellipsis') errs.push('bmv07: a meta line can wrap: ' + cs.whiteSpace + ' ' + cs.textOverflow);
+      if (!row.title || row.title !== row.textContent) errs.push('bmv07: a meta line has no tooltip with its full text');
+      if (row.getBoundingClientRect().height > 20) errs.push('bmv07: a meta line is taller than one line');
+    }
+    if (/\d+\s?[x×]\s?\d+/.test(rows[0].textContent)) errs.push('bmv07: the resolution sits on the date line');
+    const shot = [...tiles()].find((t) => /\d+×\d+/.test(t.querySelector('.mm-meta').textContent));
+    if (shot && !/\d+×\d+/.test(shot.querySelectorAll('.mm-meta-line')[1].textContent)) errs.push('bmv07: the resolution is not on line 2');
+    """)
     return failed
