@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "このモデルは音声入力で使用中です。先に音声入力を停止してください。",
     whisperPhraseHint: "テキストは、話を区切るたびに少し遅れて一文ずつ表示されます。",
     voiceWhisperCpu: "Whisper には AVX2 対応のプロセッサが必要です。この PC は対応していません。",
+    voiceWhisperLoad: "Whisper モデルを読み込めませんでした。多くの場合、空きメモリが不足しています。他のプログラムを閉じるか、Whisper モデルで小さいモデルを選んでください。",
+    voiceWhisperDamaged: "Whisper モデルが破損していたため削除しました。Whisper モデルから再度ダウンロードしてください。",
     voiceErrNothingHeard: "何も聞き取れませんでした。音声入力は Windows の既定のマイクを使用します: {mic}。",
     voiceOpenSoundSettings: "サウンド設定",
     voiceErrNetwork: "音声認識がオンラインサービスに接続できませんでした。インターネット接続を確認してください。",

@@ -50,6 +50,7 @@ ALLOW = {
         "the stored prompts are unreadable and cannot be rewritten",
         "the updated paths could not be saved",
         "could not open the file (ShellExecuteW code {code})",
+        "the loader ended without a result",
     ],
     "background save of editor state, the caller ignores the failure": [
         "db unavailable",

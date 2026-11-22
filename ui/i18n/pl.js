@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "Model jest używany przez sesję wprowadzania głosowego. Najpierw ją zatrzymaj.",
     whisperPhraseHint: "Tekst pojawia się zdanie po zdaniu, krótko po każdej pauzie.",
     voiceWhisperCpu: "Whisper wymaga procesora z AVX2. Ten komputer go nie ma.",
+    voiceWhisperLoad: "Nie udało się wczytać modelu Whisper, zwykle z braku wolnej pamięci. Zamknij inne programy lub wybierz mniejszy model w Modelach Whisper.",
+    voiceWhisperDamaged: "Model Whisper był uszkodzony i został usunięty. Pobierz go ponownie w Modelach Whisper.",
     voiceErrNothingHeard: "Nic nie usłyszano. Wprowadzanie głosowe używa domyślnego mikrofonu systemu Windows: {mic}.",
     voiceOpenSoundSettings: "Ustawienia dźwięku",
     voiceErrNetwork: "Rozpoznawanie mowy nie mogło połączyć się z usługą online. Sprawdź połączenie z internetem.",

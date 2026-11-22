@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "Modelul este folosit de o sesiune de introducere vocală. Oprește mai întâi introducerea vocală.",
     whisperPhraseHint: "Textul apare propoziție cu propoziție, la scurt timp după fiecare pauză.",
     voiceWhisperCpu: "Whisper necesită un procesor cu AVX2. Acest PC nu îl are.",
+    voiceWhisperLoad: "Modelul Whisper nu a putut fi încărcat, de obicei din lipsă de memorie liberă. Închide alte programe sau alege un model mai mic în Modele Whisper.",
+    voiceWhisperDamaged: "Modelul Whisper era deteriorat și a fost eliminat. Descarcă-l din nou în Modele Whisper.",
     voiceErrNothingHeard: "Nu s-a auzit nimic. Introducerea vocală folosește microfonul implicit din Windows: {mic}.",
     voiceOpenSoundSettings: "Setări de sunet",
     voiceErrNetwork: "Recunoașterea vocală nu a putut ajunge la serviciul online. Verifică conexiunea la internet.",

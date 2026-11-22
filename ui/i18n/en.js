@@ -225,6 +225,8 @@ export default {
     whisperModelInUse: "The model is in use by a dictation session. Stop dictation first.",
     whisperPhraseHint: "Text appears sentence by sentence, shortly after each pause.",
     voiceWhisperCpu: "Whisper needs a processor with AVX2. This PC does not have it.",
+    voiceWhisperLoad: "The Whisper model could not be loaded, usually because free memory ran out. Close other programs or pick a smaller model under Whisper models.",
+    voiceWhisperDamaged: "The Whisper model was damaged and has been removed. Download it again under Whisper models.",
     voiceErrNothingHeard: "Nothing was heard. Dictation uses the Windows default microphone: {mic}.",
     voiceOpenSoundSettings: "Sound settings",
     voiceErrNetwork: "Speech recognition could not reach the online service. Check the internet connection.",

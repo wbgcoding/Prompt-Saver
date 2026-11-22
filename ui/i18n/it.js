@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "Il modello è in uso da una sessione di input vocale. Interrompi prima l'input vocale.",
     whisperPhraseHint: "Il testo compare frase per frase, poco dopo ogni pausa.",
     voiceWhisperCpu: "Whisper richiede un processore con AVX2. Questo PC non ne dispone.",
+    voiceWhisperLoad: "Impossibile caricare il modello Whisper, di solito per mancanza di memoria libera. Chiudi altri programmi o scegli un modello più piccolo in Modelli Whisper.",
+    voiceWhisperDamaged: "Il modello Whisper era danneggiato ed è stato rimosso. Scaricalo di nuovo in Modelli Whisper.",
     voiceErrNothingHeard: "Non si è sentito nulla. L'input vocale usa il microfono predefinito di Windows: {mic}.",
     voiceOpenSoundSettings: "Impostazioni audio",
     voiceErrNetwork: "Il riconoscimento vocale non ha raggiunto il servizio online. Controlla la connessione a Internet.",

@@ -288,6 +288,31 @@ pub(crate) const WHISPER_ERR_INSECURE: &str = "whisper-insecure-url";
 pub(crate) const WHISPER_ERR_CANCELLED: &str = "cancelled";
 // The code a dictation start is refused with on a processor without AVX2.
 pub(crate) const VOICE_ERR_CPU: &str = "voice-whisper-cpu";
+// A downloaded model the engine could not load: intact (most often too little free memory), or
+// damaged and removed.
+pub(crate) const VOICE_ERR_LOAD: &str = "voice-whisper-load";
+pub(crate) const VOICE_ERR_MODEL_DAMAGED: &str = "voice-whisper-damaged";
+
+// Whether a file still has the asset's pinned size and SHA-256. Reads the whole file, so it is
+// only used after a failed load, never on the way to a session.
+pub(crate) fn file_matches_pin(path: &Path, asset: &WhisperAsset) -> bool {
+    let Ok(mut file) = fs::File::open(path) else { return false };
+    let Some(want) = hex_decode(asset.sha256) else { return false };
+    let mut hasher = ring::digest::Context::new(&ring::digest::SHA256);
+    let mut buf = vec![0u8; 1 << 20];
+    let mut total = 0u64;
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                total += n as u64;
+                hasher.update(&buf[..n]);
+            }
+            Err(_) => return false,
+        }
+    }
+    total == asset.bytes && ct_eq(hasher.finish().as_ref(), &want)
+}
 
 // Removes a model's file (and a stale partial download of it) unless `active` names it.
 pub(crate) fn delete_model_in(dir: &Path, model: &WhisperModel, active: &Mutex<Option<String>>) -> Result<(), String> {
@@ -303,6 +328,17 @@ pub(crate) fn delete_model_in(dir: &Path, model: &WhisperModel, active: &Mutex<O
         }
     }
     Ok(())
+}
+
+// Removes every partial download (`*.part`) in the models folder; only called while no download
+// runs. Returns how many files went.
+pub(crate) fn sweep_partial_downloads(dir: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else { return 0 };
+    entries
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "part") && e.path().is_file())
+        .filter(|e| fs::remove_file(e.path()).is_ok())
+        .count()
 }
 
 // ---------- Consent ----------

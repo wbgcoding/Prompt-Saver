@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "El modelo lo está usando una sesión de dictado. Detén antes el dictado.",
     whisperPhraseHint: "El texto aparece frase a frase, poco después de cada pausa.",
     voiceWhisperCpu: "Whisper necesita un procesador con AVX2. Este PC no lo tiene.",
+    voiceWhisperLoad: "No se pudo cargar el modelo de Whisper, normalmente porque no queda memoria libre. Cierra otros programas o elige un modelo más pequeño en Modelos de Whisper.",
+    voiceWhisperDamaged: "El modelo de Whisper estaba dañado y se ha eliminado. Vuelve a descargarlo en Modelos de Whisper.",
     voiceErrNothingHeard: "No se oyó nada. La entrada de voz usa el micrófono predeterminado de Windows: {mic}.",
     voiceOpenSoundSettings: "Configuración de sonido",
     voiceErrNetwork: "El reconocimiento de voz no pudo conectar con el servicio en línea. Comprueba la conexión a Internet.",

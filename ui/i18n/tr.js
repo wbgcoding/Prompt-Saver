@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "Model bir sesle giriş oturumu tarafından kullanılıyor. Önce sesle girişi durdurun.",
     whisperPhraseHint: "Metin, her duraklamadan kısa süre sonra cümle cümle görünür.",
     voiceWhisperCpu: "Whisper, AVX2 destekli bir işlemci gerektirir. Bu bilgisayarda yok.",
+    voiceWhisperLoad: "Whisper modeli yüklenemedi, genellikle boş bellek yetersiz. Diğer programları kapatın veya Whisper modelleri altında daha küçük bir model seçin.",
+    voiceWhisperDamaged: "Whisper modeli bozuktu ve kaldırıldı. Whisper modelleri altından yeniden indirin.",
     voiceErrNothingHeard: "Hiçbir şey duyulmadı. Sesle giriş, Windows varsayılan mikrofonunu kullanır: {mic}.",
     voiceOpenSoundSettings: "Ses ayarları",
     voiceErrNetwork: "Konuşma tanıma çevrimiçi hizmete ulaşamadı. İnternet bağlantını kontrol et.",

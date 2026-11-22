@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "该模型正被语音输入使用，请先停止语音输入。",
     whisperPhraseHint: "文字会逐句出现，在每次停顿后不久显示。",
     voiceWhisperCpu: "Whisper 需要支持 AVX2 的处理器，此电脑不支持。",
+    voiceWhisperLoad: "无法加载 Whisper 模型，通常是可用内存不足。请关闭其他程序，或在 Whisper 模型中选择较小的模型。",
+    voiceWhisperDamaged: "Whisper 模型已损坏并已删除。请在 Whisper 模型中重新下载。",
     voiceErrNothingHeard: "没有听到任何声音。语音输入使用 Windows 默认麦克风：{mic}。",
     voiceOpenSoundSettings: "声音设置",
     voiceErrNetwork: "语音识别无法连接到在线服务。请检查网络连接。",

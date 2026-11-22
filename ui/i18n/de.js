@@ -225,6 +225,8 @@ export default {
     whisperModelInUse: "Das Modell wird gerade von einer Spracheingabe genutzt. Beende sie zuerst.",
     whisperPhraseHint: "Der Text erscheint satzweise, kurz nach jeder Sprechpause.",
     voiceWhisperCpu: "Whisper braucht einen Prozessor mit AVX2. Dieser PC hat das nicht.",
+    voiceWhisperLoad: "Das Whisper-Modell ließ sich nicht laden, meist fehlt freier Arbeitsspeicher. Schließe andere Programme oder wähle unter Whisper-Modelle ein kleineres Modell.",
+    voiceWhisperDamaged: "Das Whisper-Modell war beschädigt und wurde entfernt. Lade es unter Whisper-Modelle neu herunter.",
     voiceErrNothingHeard: "Es wurde nichts gehört. Die Spracheingabe nutzt das Windows-Standardmikrofon: {mic}.",
     voiceOpenSoundSettings: "Soundeinstellungen",
     voiceErrNetwork: "Die Spracherkennung erreicht den Onlinedienst nicht. Prüfe die Internetverbindung.",

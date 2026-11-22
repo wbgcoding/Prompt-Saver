@@ -8,16 +8,24 @@ pub(crate) const WHISPER_RATE: u32 = 16_000;
 const FRAME: usize = 480;
 // A phrase ends after this much silence (20 frames = 600 ms).
 const PHRASE_GAP_FRAMES: usize = 20;
-// A phrase never grows past this; a longer one is cut where it stands.
-pub(crate) const PHRASE_MAX_SECS: usize = 25;
+// A phrase never grows past this. A longer one is cut at its quietest frame within the last
+// CUT_SEARCH_FRAMES and the rest starts the next phrase, so a word is rarely split. Short
+// phrases also keep the wait after a stop short: only the last one is still to be transcribed.
+pub(crate) const PHRASE_MAX_SECS: usize = 12;
 const PHRASE_MAX_SAMPLES: usize = PHRASE_MAX_SECS * WHISPER_RATE as usize;
+const CUT_SEARCH_FRAMES: usize = 50;
 // Quiet lead-in kept before the first loud frame so the start of a word is not clipped.
 const PRE_ROLL_FRAMES: usize = 10;
+// The background level is the quietest frame of the last two seconds. Speech always has
+// quieter moments between words, so the level follows the microphone's own noise and not the
+// voice. The window starts filled with the fixed threshold, so the first two seconds behave
+// as if the microphone were quiet.
+const FLOOR_WINDOW_FRAMES: usize = 66;
 // Silence kept after the last loud frame when the phrase is cut at a pause.
 const TAIL_KEEP_FRAMES: usize = 5;
 // A phrase with fewer loud frames than this (about 200 ms) is a click or a bump, not speech.
 const MIN_SPEECH_FRAMES: usize = 7;
-// A frame is loud above this level and above the tracked background level times the margin.
+// A frame is loud above this level and above the background level times the margin.
 const SPEECH_FLOOR_RMS: f32 = 0.008;
 const NOISE_MARGIN: f32 = 3.0;
 
@@ -70,12 +78,14 @@ fn frame_rms(frame: &[f32]) -> f32 {
 // phrase comes back from `push` (a pause of 600 ms ends one) or from `flush` at the end of the session.
 pub(crate) struct Segmenter {
     pending: Vec<f32>,
-    pre_roll: VecDeque<Vec<f32>>,
+    pre_roll: VecDeque<(Vec<f32>, f32)>,
     phrase: Vec<f32>,
+    // One entry per frame of `phrase`: its level and whether it was loud.
+    phrase_frames: Vec<(f32, bool)>,
     in_phrase: bool,
     speech_frames: usize,
     trailing_silence: usize,
-    floor: f32,
+    levels: VecDeque<f32>,
     last_frame_loud: bool,
 }
 
@@ -85,10 +95,11 @@ impl Segmenter {
             pending: Vec::new(),
             pre_roll: VecDeque::new(),
             phrase: Vec::new(),
+            phrase_frames: Vec::new(),
             in_phrase: false,
             speech_frames: 0,
             trailing_silence: 0,
-            floor: 0.0,
+            levels: std::iter::repeat_n(SPEECH_FLOOR_RMS / NOISE_MARGIN, FLOOR_WINDOW_FRAMES).collect(),
             last_frame_loud: false,
         }
     }
@@ -96,6 +107,11 @@ impl Segmenter {
     // Whether the most recent frame was loud: the session's idle clock restarts while it is true.
     pub(crate) fn speaking(&self) -> bool {
         self.last_frame_loud
+    }
+
+    // The phrase being spoken right now, once it holds enough speech to be worth a preview.
+    pub(crate) fn in_progress(&self) -> Option<&[f32]> {
+        (self.in_phrase && self.speech_frames >= MIN_SPEECH_FRAMES).then_some(self.phrase.as_slice())
     }
 
     pub(crate) fn push(&mut self, samples: &[f32]) -> Vec<Vec<f32>> {
@@ -120,12 +136,16 @@ impl Segmenter {
 
     fn frame(&mut self, frame: Vec<f32>, done: &mut Vec<Vec<f32>>) {
         let rms = frame_rms(&frame);
-        let loud = rms > SPEECH_FLOOR_RMS.max(self.floor * NOISE_MARGIN);
+        let floor = self.levels.iter().copied().fold(f32::INFINITY, f32::min);
+        self.levels.push_back(rms);
+        while self.levels.len() > FLOOR_WINDOW_FRAMES {
+            self.levels.pop_front();
+        }
+        let loud = rms > SPEECH_FLOOR_RMS.max(floor * NOISE_MARGIN);
         self.last_frame_loud = loud;
         if !loud && !self.in_phrase {
-            // Quiet and between phrases: track the background level and keep the lead-in.
-            self.floor = self.floor * 0.98 + rms * 0.02;
-            self.pre_roll.push_back(frame);
+            // Quiet and between phrases: keep the lead-in.
+            self.pre_roll.push_back((frame, rms));
             while self.pre_roll.len() > PRE_ROLL_FRAMES {
                 self.pre_roll.pop_front();
             }
@@ -135,9 +155,15 @@ impl Segmenter {
             self.in_phrase = true;
             self.speech_frames = 0;
             self.trailing_silence = 0;
-            self.phrase = self.pre_roll.drain(..).flatten().collect();
+            self.phrase.clear();
+            self.phrase_frames.clear();
+            for (f, level) in self.pre_roll.drain(..) {
+                self.phrase.extend_from_slice(&f);
+                self.phrase_frames.push((level, false));
+            }
         }
         self.phrase.extend_from_slice(&frame);
+        self.phrase_frames.push((rms, loud));
         if loud {
             self.speech_frames += 1;
             self.trailing_silence = 0;
@@ -149,7 +175,31 @@ impl Segmenter {
             }
         }
         if self.phrase.len() >= PHRASE_MAX_SAMPLES {
-            self.finish(done);
+            self.cut_at_quietest(done);
+        }
+    }
+
+    // The phrase hit its cap: everything up to and including the quietest recent frame goes
+    // out, the rest stays as the start of the next phrase.
+    fn cut_at_quietest(&mut self, done: &mut Vec<Vec<f32>>) {
+        let n = self.phrase_frames.len();
+        let from = n.saturating_sub(CUT_SEARCH_FRAMES);
+        let cut = (from..n)
+            .min_by(|&a, &b| self.phrase_frames[a].0.total_cmp(&self.phrase_frames[b].0))
+            .map_or(n, |i| i + 1);
+        let tail = self.phrase.split_off(cut * FRAME);
+        let tail_frames = self.phrase_frames.split_off(cut);
+        let head_speech = self.phrase_frames.iter().filter(|f| f.1).count();
+        let head = std::mem::replace(&mut self.phrase, tail);
+        self.phrase_frames = tail_frames;
+        if head_speech >= MIN_SPEECH_FRAMES {
+            done.push(head);
+        }
+        self.speech_frames = self.phrase_frames.iter().filter(|f| f.1).count();
+        self.trailing_silence = self.phrase_frames.iter().rev().take_while(|f| !f.1).count();
+        if self.phrase.is_empty() {
+            self.in_phrase = false;
+            self.pre_roll.clear();
         }
     }
 
@@ -158,6 +208,7 @@ impl Segmenter {
         let keep = self.phrase.len().saturating_sub(drop_frames * FRAME);
         self.phrase.truncate(keep);
         let phrase = std::mem::take(&mut self.phrase);
+        self.phrase_frames.clear();
         if self.speech_frames >= MIN_SPEECH_FRAMES {
             done.push(phrase);
         }
@@ -171,6 +222,13 @@ impl Segmenter {
 // What the engine does with one phrase; the real one wraps whisper.cpp, tests use a fake.
 pub(crate) trait Transcribe {
     fn transcribe(&mut self, samples: &[f32], lang: Option<&str>) -> Result<String, String>;
+
+    // The same for a live preview, which a newer finished phrase makes worthless: an engine that
+    // can stop early does so once `cancel` is set. The default just runs to the end.
+    fn transcribe_cancellable(&mut self, samples: &[f32], lang: Option<&str>, cancel: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<String, String> {
+        let _ = cancel;
+        self.transcribe(samples, lang)
+    }
 }
 
 // The file path of the pipeline: all samples through the segmenter, every phrase through the

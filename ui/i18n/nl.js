@@ -248,6 +248,8 @@ export default {
     whisperModelInUse: "Het model wordt gebruikt door een spraakinvoersessie. Stop eerst de spraakinvoer.",
     whisperPhraseHint: "De tekst verschijnt zin voor zin, kort na elke pauze.",
     voiceWhisperCpu: "Whisper heeft een processor met AVX2 nodig. Deze pc heeft die niet.",
+    voiceWhisperLoad: "Het Whisper-model kon niet worden geladen, meestal door te weinig vrij geheugen. Sluit andere programma's of kies een kleiner model onder Whisper-modellen.",
+    voiceWhisperDamaged: "Het Whisper-model was beschadigd en is verwijderd. Download het opnieuw onder Whisper-modellen.",
     voiceErrNothingHeard: "Er is niets gehoord. Spraakinvoer gebruikt de standaardmicrofoon van Windows: {mic}.",
     voiceOpenSoundSettings: "Geluidsinstellingen",
     voiceErrNetwork: "De spraakherkenning kon de onlineservice niet bereiken. Controleer de internetverbinding.",

@@ -510,6 +510,39 @@ fn deleting_removes_the_file_and_a_stale_part_and_tolerates_absence() {
 }
 
 #[test]
+fn a_model_file_matches_its_pin_only_with_the_right_bytes() {
+    let dir = scratch("pin");
+    // SHA-256 of "abc".
+    let asset = WhisperAsset { file: "t.bin", url: "", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" };
+    let path = dir.join(asset.file);
+    assert!(!file_matches_pin(&path, &asset), "a missing file matches");
+    fs::write(&path, b"abc").unwrap();
+    assert!(file_matches_pin(&path, &asset));
+    fs::write(&path, b"abd").unwrap();
+    assert!(!file_matches_pin(&path, &asset), "same size, other bytes");
+    fs::write(&path, b"abcd").unwrap();
+    assert!(!file_matches_pin(&path, &asset), "other size");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_sweep_removes_only_partial_downloads() {
+    let dir = scratch("sweep");
+    let m = whisper_model(WHISPER_BASE).unwrap();
+    fs::write(dir.join(m.asset.file), b"a").unwrap();
+    fs::write(dir.join(format!("{}.part", m.asset.file)), b"b").unwrap();
+    fs::write(dir.join("other.bin.part"), b"c").unwrap();
+    fs::write(dir.join(WHISPER_VAD.file), b"v").unwrap();
+    assert_eq!(sweep_partial_downloads(&dir), 2);
+    let mut left = vec![m.asset.file.to_string(), WHISPER_VAD.file.to_string()];
+    left.sort();
+    assert_eq!(parts_in(&dir), left);
+    assert_eq!(sweep_partial_downloads(&dir), 0);
+    assert_eq!(sweep_partial_downloads(&dir.join("missing")), 0);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_active_model_slot_starts_empty_and_survives_a_poisoned_lock() {
     assert!(WHISPER_ACTIVE_MODEL.lock().unwrap_or_else(|e| e.into_inner()).is_none());
     let slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(Some(WHISPER_BASE.to_string())));

@@ -130,19 +130,79 @@ fn quiet_audio_never_produces_a_phrase() {
     assert!(phrases_of(&hiss, 1600).is_empty());
 }
 
+// Speech-like: half a second of voice, then 120 ms between words, over and over.
+fn talk(secs: f32) -> Vec<f32> {
+    let mut out = Vec::new();
+    while (out.len() as f32) < secs * RATE {
+        out.extend(tone(0.5, 0.3));
+        out.extend(quiet(0.12));
+    }
+    out.truncate((secs * RATE) as usize);
+    out
+}
+
+// Deterministic hiss with the given RMS level (uniform noise, RMS = amplitude / sqrt(3)).
+fn noise(secs: f32, rms: f32, seed: u32) -> Vec<f32> {
+    let amp = rms * 3f32.sqrt();
+    let mut x = seed.wrapping_mul(2_654_435_761).max(1);
+    (0..(secs * RATE) as usize)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            amp * ((x as f32 / u32::MAX as f32) * 2.0 - 1.0)
+        })
+        .collect()
+}
+
+fn mix(a: &[f32], b: &[f32]) -> Vec<f32> {
+    a.iter().zip(b).map(|(x, y)| x + y).collect()
+}
+
 #[test]
-fn a_long_phrase_is_cut_at_the_cap_and_the_rest_is_kept() {
-    let signal = tone(30.0, 0.3);
+fn a_long_phrase_is_cut_at_a_quiet_moment_and_the_rest_is_kept() {
+    let signal = talk(20.0);
     let mut seg = Segmenter::new();
     let mut done = Vec::new();
     for c in signal.chunks(1600) {
         done.extend(seg.push(c));
     }
     assert_eq!(done.len(), 1);
-    assert!(secs(&done[0]) <= PHRASE_MAX_SECS as f32 + 0.1, "{} s", secs(&done[0]));
-    assert!(secs(&done[0]) >= PHRASE_MAX_SECS as f32 - 0.1);
+    let first = secs(&done[0]);
+    assert!(first <= PHRASE_MAX_SECS as f32 + 0.05, "{first} s");
+    assert!(first >= PHRASE_MAX_SECS as f32 - 1.6, "{first} s");
+    // The cut lies in a pause between words, not in the middle of one.
+    let last_frame = &done[0][done[0].len() - 480..];
+    assert!(last_frame.iter().all(|s| s.abs() < 1e-6), "cut inside a word");
     let rest = seg.flush().expect("the remainder is a phrase");
-    assert!((secs(&rest) - 5.0).abs() < 0.2, "{} s", secs(&rest));
+    assert!((first + secs(&rest) - 20.0).abs() < 0.2, "{first} s + {} s", secs(&rest));
+}
+
+#[test]
+fn a_noisy_microphone_still_splits_phrases_at_pauses() {
+    // Background hiss well above the fixed threshold, as from a cheap USB microphone. The
+    // speech bursts on top of it must still come out one by one, and the hiss between and
+    // after them must count as quiet so the pause limit can run out.
+    let bed = noise(12.0, 0.02, 7);
+    let mut voice = quiet(4.0);
+    voice.extend(talk(1.5));
+    voice.extend(quiet(1.5));
+    voice.extend(talk(1.5));
+    voice.extend(quiet(3.5));
+    let signal = mix(&bed, &voice);
+    let mut seg = Segmenter::new();
+    let mut done = Vec::new();
+    for c in signal.chunks(1600) {
+        done.extend(seg.push(c));
+    }
+    assert!(!seg.speaking(), "the hiss after the speech still counts as speech");
+    assert!(seg.flush().is_none(), "a phrase is still open in the hiss");
+    // The two bursts are the last two phrases (the first seconds, before the level is known,
+    // may yield one phrase of hiss), each about as long as the burst.
+    assert!(done.len() >= 2, "{} phrases", done.len());
+    for p in &done[done.len() - 2..] {
+        assert!((1.4..2.6).contains(&secs(p)), "{} s", secs(p));
+    }
 }
 
 #[test]
@@ -368,7 +428,7 @@ impl Transcribe for Stubborn {
 }
 
 fn config(auto_stop_sec: u32, max_sec: u32) -> SessionConfig {
-    SessionConfig { lang: Some("de"), auto_stop_sec, max_sec, poll: Duration::from_millis(1) }
+    SessionConfig { lang: Some("de"), auto_stop_sec, max_sec, poll: Duration::from_millis(1), interim: false }
 }
 
 type Texts = Arc<Mutex<Vec<String>>>;
@@ -782,4 +842,102 @@ fn voice_activity_detection_is_set_up_without_a_panic() {
     use whisper_rs::{FullParams, SamplingStrategy};
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     crate::whisper_engine::real::apply_vad(&mut params, "silero.bin");
+}
+
+// ---------- Live preview ----------
+
+type Log = Arc<Mutex<Vec<(&'static str, String)>>>;
+
+// Answers a preview with `preview` and a finished phrase with `last`.
+struct Previewing {
+    preview: &'static str,
+    last: &'static str,
+}
+
+impl Transcribe for Previewing {
+    fn transcribe(&mut self, _: &[f32], _: Option<&str>) -> Result<String, String> {
+        Ok(self.last.to_string())
+    }
+    fn transcribe_cancellable(&mut self, _: &[f32], _: Option<&str>, _: &Arc<AtomicBool>) -> Result<String, String> {
+        Ok(self.preview.to_string())
+    }
+}
+
+fn run_with_previews(clip: Vec<f32>, engine: Previewing, interim: bool) -> (SessionOutcome, Vec<(&'static str, String)>) {
+    let (tx, rx) = mpsc::channel();
+    let log: Log = Arc::default();
+    let (l1, l2) = (log.clone(), log.clone());
+    let on_text: TextSink = Arc::new(move |t| l1.lock().unwrap().push(("text", t)));
+    let on_partial: TextSink = Arc::new(move |t| l2.lock().unwrap().push(("partial", t)));
+    // 100 ms pieces with a short real pause each, so the worker gets idle moments between them.
+    let mut q: VecDeque<Vec<f32>> = clip.chunks(1600).map(|c| c.to_vec()).collect();
+    let mut feed = move || -> Result<Vec<f32>, &'static str> {
+        std::thread::sleep(Duration::from_millis(3));
+        match q.pop_front() {
+            Some(c) => Ok(c),
+            None => {
+                let _ = tx.send("manual");
+                Ok(Vec::new())
+            }
+        }
+    };
+    let mut cfg = config(0, 600);
+    cfg.interim = interim;
+    let outcome = run_pipeline_with(&cfg, Box::new(engine), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), on_text, Some(on_partial));
+    let out = log.lock().unwrap().clone();
+    (outcome, out)
+}
+
+#[test]
+fn a_preview_shows_while_speaking_and_the_final_text_follows_once() {
+    let clip = cat(&[quiet(0.5), talk(4.0), quiet(1.0)]);
+    let (outcome, log) = run_with_previews(clip, Previewing { preview: "so far", last: "all of it" }, true);
+    assert_eq!(outcome.phrases, 1);
+    let finals: Vec<usize> = log.iter().enumerate().filter(|(_, e)| e.0 == "text").map(|(i, _)| i).collect();
+    assert_eq!(finals.len(), 1, "{log:?}");
+    assert_eq!(log[finals[0]].1, "all of it");
+    let previews = log.iter().filter(|e| e.0 == "partial" && e.1 == "so far").count();
+    assert!(previews >= 1, "no preview before the final: {log:?}");
+    // Nothing of that phrase comes after its final text.
+    assert!(log[finals[0] + 1..].iter().all(|e| e.0 != "partial" || e.1.is_empty()), "{log:?}");
+}
+
+#[test]
+fn without_the_setting_there_is_no_preview() {
+    let clip = cat(&[quiet(0.5), talk(4.0), quiet(1.0)]);
+    let (_, log) = run_with_previews(clip, Previewing { preview: "so far", last: "all of it" }, false);
+    assert_eq!(log, vec![("text", "all of it".to_string())]);
+}
+
+#[test]
+fn a_preview_whose_phrase_holds_no_text_is_cleared() {
+    let clip = cat(&[quiet(0.5), talk(3.0), quiet(1.0)]);
+    let (outcome, log) = run_with_previews(clip, Previewing { preview: "noise words", last: "" }, true);
+    assert_eq!(outcome.phrases, 0);
+    assert!(log.iter().any(|e| e.1 == "noise words"), "fixture: no preview shown: {log:?}");
+    assert_eq!(log.last(), Some(&("partial", String::new())), "{log:?}");
+    assert!(log.iter().all(|e| e.0 != "text"));
+}
+
+#[test]
+fn what_arrived_just_before_a_manual_stop_is_still_transcribed() {
+    // The stop is already waiting when the loop looks for it, so the speech handed over by the
+    // same poll would be lost without one last pull.
+    let (tx, rx) = mpsc::channel();
+    let (texts, sink) = collector();
+    let mut n = 0;
+    let mut feed = move || -> Result<Vec<f32>, &'static str> {
+        n += 1;
+        match n {
+            1 => {
+                let _ = tx.send("manual");
+                Ok(quiet(0.3))
+            }
+            2 => Ok(tone(1.0, 0.3)),
+            _ => Ok(Vec::new()),
+        }
+    };
+    let outcome = run_pipeline(&config(0, 600), Box::new(Numbered { calls: Arc::default(), fail: false }), &mut feed, &rx, &Arc::new(AtomicBool::new(false)), sink);
+    assert_eq!(outcome.reason, "manual");
+    assert_eq!(*texts.lock().unwrap(), vec!["phrase 1".to_string()]);
 }

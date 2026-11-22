@@ -56,6 +56,11 @@ pub(crate) fn build_catalog(dir: Option<&Path>, profile: SystemProfile) -> Whisp
 // The models with their downloaded state, the one that suits this PC and the PC's profile.
 #[tauri::command(async)]
 pub(crate) fn whisper_catalog() -> WhisperCatalog {
+    // A download cut off by an exit or a crash leaves its partial file behind; holding the
+    // download slot while sweeping keeps a download from starting under the sweep.
+    if let (Some(dir), Some(_claim)) = (whisper_dir(), FlagClaim::take(&WHISPER_DOWNLOAD_RUNNING)) {
+        sweep_partial_downloads(&dir);
+    }
     build_catalog(whisper_dir().as_deref(), system_profile())
 }
 
@@ -127,6 +132,13 @@ pub(crate) async fn download_whisper_model(
         if let Some(engine) = engine_after_download(was_first, current.as_deref()) {
             store.settings.ui_texts.insert(VOICE_ENGINE_KEY.to_string(), engine.to_string());
             engine_set = save_settings(&app, &store.settings);
+            if !engine_set {
+                // Not on disk, so not in memory either: the window keeps showing what is in effect.
+                match current {
+                    Some(v) => store.settings.ui_texts.insert(VOICE_ENGINE_KEY.to_string(), v),
+                    None => store.settings.ui_texts.remove(VOICE_ENGINE_KEY),
+                };
+            }
         }
     }
     if engine_set {
@@ -135,10 +147,14 @@ pub(crate) async fn download_whisper_model(
     Ok(WhisperDownloadResult { model: m.id.to_string(), engine_set })
 }
 
-// Deletes a downloaded model; refused while a dictation session holds it.
+// Deletes a downloaded model; refused while a dictation session holds it or a download runs
+// (the delete would take the partial file the download is writing).
 #[tauri::command(async)]
 pub(crate) fn delete_whisper_model(model: String) -> Result<(), String> {
     let m = whisper_model(&model).ok_or_else(|| WHISPER_ERR_UNKNOWN.to_string())?;
+    if WHISPER_DOWNLOAD_RUNNING.load(Ordering::SeqCst) {
+        return Err(WHISPER_ERR_BUSY.to_string());
+    }
     let dir = whisper_dir().ok_or_else(|| "target dir: no per-user folder".to_string())?;
     delete_model_in(&dir, m, &WHISPER_ACTIVE_MODEL)
 }

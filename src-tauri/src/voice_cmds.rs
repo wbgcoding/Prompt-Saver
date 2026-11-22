@@ -68,7 +68,7 @@ pub(crate) async fn voice_start(
     // before voice::prepare() and the consent check below.
     let local = lock(&state).settings.ui_texts.get(crate::whisper_cmds::VOICE_ENGINE_KEY).is_some_and(|v| v == crate::whisper_cmds::VOICE_ENGINE_WHISPER);
     if local {
-        return start_whisper(&app, &state, &vstate, lang, auto_stop_sec, max_sec, token);
+        return start_whisper(&app, &state, &vstate, lang, auto_stop_sec, max_sec, interim, token);
     }
     #[cfg(windows)]
     {
@@ -150,6 +150,7 @@ fn launch_session(
 
 // Starts a dictation session on the local engine. Refuses with voice-whisper-no-model when no
 // model is downloaded (or the build has no engine); nothing else is asked of the user first.
+#[allow(clippy::too_many_arguments)]
 fn start_whisper(
     app: &AppHandle,
     state: &State<'_, Db>,
@@ -157,6 +158,7 @@ fn start_whisper(
     lang: String,
     auto_stop_sec: u32,
     max_sec: u32,
+    interim: bool,
     token: u64,
 ) -> Result<VoiceStartResult, String> {
     let release = |code: &str| {
@@ -166,7 +168,7 @@ fn start_whisper(
     };
     #[cfg(not(feature = "whisper"))]
     {
-        let _ = (app, state, &lang, auto_stop_sec, max_sec, token);
+        let _ = (app, state, &lang, auto_stop_sec, max_sec, interim, token);
         release("voice-whisper-no-model")
     }
     #[cfg(feature = "whisper")]
@@ -188,12 +190,21 @@ fn start_whisper(
         let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let (max_sec, auto_stop_sec) = voice::clamp_durations(max_sec, auto_stop_sec);
         let lang_tag = resolved_lang_tag(&lang, ui_lang);
-        let mic_name = if mic_id.is_empty() { crate::audio::default_mic_name() } else { None };
+        // The device the nothing-heard message names: the chosen one when it is still there.
+        let mic_name = (!mic_id.is_empty())
+            .then(|| crate::audio::list_mic_devices().into_iter().find(|d| d.id == mic_id).map(|d| d.name))
+            .flatten()
+            .or_else(crate::audio::default_mic_name);
         let (tx, stop_rx) = std::sync::mpsc::channel::<&'static str>();
         let ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         // Held from here until the session thread is done with the model (a failed spawn drops it
         // with the closure), so a delete can never take the file from under a live session.
         let active = crate::whisper_engine::ActiveModelGuard::set(&WHISPER_ACTIVE_MODEL, model.id);
+        // A delete that slipped in between the pick and the guard took the file away.
+        if !model_downloaded(&dir, model) {
+            drop(active);
+            return release("voice-whisper-no-model");
+        }
         let args = SessionArgs {
             app: app.clone(),
             id,
@@ -202,7 +213,7 @@ fn start_whisper(
             mic_id,
             mic_name,
             lang_tag: lang_tag.clone(),
-            cfg: SessionConfig { lang: crate::whisper_audio::whisper_lang(&lang), auto_stop_sec, max_sec, poll: SESSION_POLL },
+            cfg: SessionConfig { lang: crate::whisper_audio::whisper_lang(&lang), auto_stop_sec, max_sec, poll: SESSION_POLL, interim },
             ended: ended.clone(),
             stop_rx,
         };

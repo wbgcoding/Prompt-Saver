@@ -224,6 +224,8 @@ export default {
     whisperModelInUse: "Le modèle est utilisé par une session de saisie vocale. Arrêtez d'abord la saisie vocale.",
     whisperPhraseHint: "Le texte apparaît phrase par phrase, peu après chaque pause.",
     voiceWhisperCpu: "Whisper nécessite un processeur compatible AVX2. Ce PC n'en dispose pas.",
+    voiceWhisperLoad: "Impossible de charger le modèle Whisper, le plus souvent faute de mémoire libre. Fermez d'autres programmes ou choisissez un modèle plus petit dans Modèles Whisper.",
+    voiceWhisperDamaged: "Le modèle Whisper était endommagé et a été supprimé. Téléchargez-le à nouveau dans Modèles Whisper.",
     voiceErrNothingHeard: "Rien n'a été entendu. La saisie vocale utilise le microphone par défaut de Windows : {mic}.",
     voiceOpenSoundSettings: "Paramètres son",
     voiceErrNetwork: "La reconnaissance vocale n'a pas pu joindre le service en ligne. Vérifie la connexion Internet.",

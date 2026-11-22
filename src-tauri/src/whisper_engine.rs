@@ -163,6 +163,8 @@ pub(crate) struct SessionConfig {
     pub(crate) auto_stop_sec: u32,
     pub(crate) max_sec: u32,
     pub(crate) poll: Duration,
+    // Live preview of the phrase being spoken (the voiceInterim setting).
+    pub(crate) interim: bool,
 }
 
 pub(crate) struct SessionOutcome {
@@ -173,47 +175,120 @@ pub(crate) struct SessionOutcome {
     pub(crate) error: Option<&'static str>,
 }
 
+// A preview needs this much speech before the first pass, and this much more for each later one.
+const INTERIM_FIRST_SAMPLES: usize = WHISPER_RATE as usize;
+const INTERIM_STEP_SAMPLES: usize = WHISPER_RATE as usize * 7 / 10;
+
+// What the worker is handed: a finished phrase, or a snapshot of the phrase still being spoken
+// with the flag that makes it worthless once that phrase is finished.
+enum Job {
+    Final(Vec<f32>),
+    Preview(Vec<f32>, Arc<AtomicBool>),
+}
+
+pub(crate) type TextSink = Arc<dyn Fn(String) + Send + Sync>;
+
+// The session without a live preview; see run_pipeline_with.
+#[cfg(test)]
+pub(crate) fn run_pipeline(
+    cfg: &SessionConfig,
+    engine: Box<dyn Transcribe + Send>,
+    pull: &mut dyn FnMut() -> Result<Vec<f32>, &'static str>,
+    stop_rx: &mpsc::Receiver<&'static str>,
+    abort: &Arc<AtomicBool>,
+    on_text: TextSink,
+) -> SessionOutcome {
+    run_pipeline_with(cfg, engine, pull, stop_rx, abort, on_text, None)
+}
+
 // The session proper. `pull` hands over the 16 kHz mono samples that arrived since its last
 // call (Err = the microphone is gone); `engine` runs on a worker thread so listening goes on
 // while a phrase is transcribed; `on_text` gets every non-empty result in order.
 //
+// With `on_partial` and `cfg.interim`, the phrase still being spoken is transcribed whenever the
+// worker has nothing else to do, and the result goes to `on_partial` as text the next result
+// replaces. A finished phrase always comes first: a preview is only started while nothing is
+// queued, and a running one is cancelled as soon as a phrase is finished. An empty `on_partial`
+// clears a preview whose phrase turned out to hold no text.
+//
 // A manual stop, the pause limit and the time limit end the listening but let the phrase in
 // progress and the ones still queued come out. A shutdown, or a sender that went away,
 // abandons them and sets `abort`, which the engine watches so even a long phrase ends quickly.
-pub(crate) fn run_pipeline(
+pub(crate) fn run_pipeline_with(
     cfg: &SessionConfig,
     mut engine: Box<dyn Transcribe + Send>,
     pull: &mut dyn FnMut() -> Result<Vec<f32>, &'static str>,
     stop_rx: &mpsc::Receiver<&'static str>,
     abort: &Arc<AtomicBool>,
-    on_text: Arc<dyn Fn(String) + Send + Sync>,
+    on_text: TextSink,
+    on_partial: Option<TextSink>,
 ) -> SessionOutcome {
-    let (phrase_tx, phrase_rx) = mpsc::channel::<Vec<f32>>();
+    let (job_tx, job_rx) = mpsc::channel::<Job>();
     let (err_tx, err_rx) = mpsc::channel::<&'static str>();
     let heard = Arc::new(AtomicU32::new(0));
-    let (w_abort, w_heard, lang) = (abort.clone(), heard.clone(), cfg.lang);
+    // Jobs handed over and not yet done: a preview starts only when this is 0.
+    let pending = Arc::new(AtomicU32::new(0));
+    let (w_abort, w_heard, w_pending, lang) = (abort.clone(), heard.clone(), pending.clone(), cfg.lang);
+    let w_partial = on_partial.clone();
     let spawned = std::thread::Builder::new().name("whisper-worker".into()).spawn(move || {
-        for phrase in phrase_rx {
+        // Whether the window shows a preview that the next final result has to replace.
+        let mut preview_shown = false;
+        for job in job_rx {
             if w_abort.load(Ordering::SeqCst) {
                 break;
             }
-            match engine.transcribe(&phrase, lang) {
-                Ok(raw) => {
-                    let text = clean_text(&raw);
-                    if !text.is_empty() && !w_abort.load(Ordering::SeqCst) {
-                        w_heard.fetch_add(1, Ordering::SeqCst);
-                        on_text(text);
+            match job {
+                Job::Preview(samples, cancel) => {
+                    if !cancel.load(Ordering::SeqCst) {
+                        // A preview that fails or is cut short is simply not shown.
+                        if let Ok(raw) = engine.transcribe_cancellable(&samples, lang, &cancel) {
+                            let text = clean_text(&raw);
+                            if !text.is_empty() && !cancel.load(Ordering::SeqCst) && !w_abort.load(Ordering::SeqCst) {
+                                if let Some(p) = &w_partial {
+                                    preview_shown = true;
+                                    p(text);
+                                }
+                            }
+                        }
                     }
                 }
-                Err(_) => {
-                    let _ = err_tx.send("voice-failed");
-                    break;
-                }
+                Job::Final(phrase) => match engine.transcribe(&phrase, lang) {
+                    Ok(raw) => {
+                        let text = clean_text(&raw);
+                        let aborted = w_abort.load(Ordering::SeqCst);
+                        if !aborted && !text.is_empty() {
+                            w_heard.fetch_add(1, Ordering::SeqCst);
+                            on_text(text);
+                        } else if !aborted && preview_shown {
+                            if let Some(p) = &w_partial {
+                                p(String::new());
+                            }
+                        }
+                        preview_shown = false;
+                    }
+                    Err(_) => {
+                        let _ = err_tx.send("voice-failed");
+                        break;
+                    }
+                },
             }
+            w_pending.fetch_sub(1, Ordering::SeqCst);
         }
     });
     let Ok(worker) = spawned else {
         return SessionOutcome { reason: "error", phrases: 0, error: Some("voice-failed") };
+    };
+
+    let previews = cfg.interim && on_partial.is_some();
+    // The running preview's cancel flag, and how long its phrase was when it was taken.
+    let mut preview_cancel: Option<Arc<AtomicBool>> = None;
+    let mut preview_len = 0usize;
+    let send_final = |phrase: Vec<f32>, preview_cancel: &mut Option<Arc<AtomicBool>>| {
+        if let Some(c) = preview_cancel.take() {
+            c.store(true, Ordering::SeqCst);
+        }
+        pending.fetch_add(1, Ordering::SeqCst);
+        let _ = job_tx.send(Job::Final(phrase));
     };
 
     let started = Instant::now();
@@ -233,7 +308,8 @@ pub(crate) fn run_pipeline(
         match pull() {
             Ok(samples) => {
                 for phrase in segmenter.push(&samples) {
-                    let _ = phrase_tx.send(phrase);
+                    send_final(phrase, &mut preview_cancel);
+                    preview_len = 0;
                 }
                 if segmenter.speaking() {
                     idle_since = Instant::now();
@@ -244,19 +320,42 @@ pub(crate) fn run_pipeline(
                 break "error";
             }
         }
+        if previews && pending.load(Ordering::SeqCst) == 0 {
+            match segmenter.in_progress() {
+                Some(cur) if cur.len() >= INTERIM_FIRST_SAMPLES && cur.len() >= preview_len + INTERIM_STEP_SAMPLES => {
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    preview_cancel = Some(cancel.clone());
+                    preview_len = cur.len();
+                    pending.fetch_add(1, Ordering::SeqCst);
+                    let _ = job_tx.send(Job::Preview(cur.to_vec(), cancel));
+                }
+                Some(_) => {}
+                None => preview_len = 0,
+            }
+        }
         if let Some(r) = crate::voice::should_stop(idle_since.elapsed(), started.elapsed(), cfg.auto_stop_sec, cfg.max_sec) {
             break r;
         }
     };
 
     if matches!(reason, "manual" | "silence" | "max") {
+        // What arrived since the last poll belongs to the session too (a manual stop breaks the
+        // loop before its pull), then the phrase in progress.
+        if let Ok(samples) = pull() {
+            for phrase in segmenter.push(&samples) {
+                send_final(phrase, &mut preview_cancel);
+            }
+        }
         if let Some(last) = segmenter.flush() {
-            let _ = phrase_tx.send(last);
+            send_final(last, &mut preview_cancel);
+        }
+        if let Some(c) = preview_cancel.take() {
+            c.store(true, Ordering::SeqCst);
         }
     } else {
         abort.store(true, Ordering::SeqCst);
     }
-    drop(phrase_tx);
+    drop(job_tx);
     // Let the worker finish what is queued; a shutdown that arrives meanwhile cuts it short.
     let mut shutdown = reason == "shutdown";
     while !worker.is_finished() {
@@ -346,6 +445,17 @@ pub(crate) mod real {
 
     impl Transcribe for WhisperTranscriber {
         fn transcribe(&mut self, samples: &[f32], lang: Option<&str>) -> Result<String, String> {
+            self.run(samples, lang, None)
+        }
+
+        fn transcribe_cancellable(&mut self, samples: &[f32], lang: Option<&str>, cancel: &Arc<AtomicBool>) -> Result<String, String> {
+            self.run(samples, lang, Some(cancel.clone()))
+        }
+    }
+
+    impl WhisperTranscriber {
+        // One pass of the engine; it stops early on the session's abort or on `cancel`.
+        fn run(&mut self, samples: &[f32], lang: Option<&str>, cancel: Option<Arc<AtomicBool>>) -> Result<String, String> {
             let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
             params.set_language(Some(lang.unwrap_or("auto")));
             params.set_n_threads(self.threads);
@@ -362,7 +472,8 @@ pub(crate) mod real {
             // The library keeps the closure's box for good (one small allocation per phrase). The
             // box type is spelled out because the library reads the pointer back as exactly that.
             let flag = self.abort.clone();
-            let watch: Box<dyn FnMut() -> bool> = Box::new(move || flag.load(Ordering::Relaxed));
+            let watch: Box<dyn FnMut() -> bool> =
+                Box::new(move || flag.load(Ordering::Relaxed) || cancel.as_ref().is_some_and(|c| c.load(Ordering::Relaxed)));
             params.set_abort_callback_safe::<Option<Box<dyn FnMut() -> bool>>, Box<dyn FnMut() -> bool>>(Some(watch));
             let padded;
             let audio: &[f32] = if samples.len() < MIN_SAMPLES {
@@ -419,32 +530,82 @@ pub(crate) mod real {
         // until a phrase is transcribed, so the open microphone announces itself with an empty
         // partial (the window inserts nothing for it).
         let _ = a.app.emit("voice-partial", VoiceTextEvent { id: a.id, token: a.token, text: String::new() });
+        // From here on every way out, a panic included, closes the microphone.
+        let _close_mic = CloseOnDrop(cap_stop.clone());
         let abort = Arc::new(AtomicBool::new(false));
-        let engine = match build_engine(model, &dir, abort.clone()) {
+        // The capture queue keeps only about two seconds, and a cold model can take longer to
+        // load: the model loads on a helper thread while what is said meanwhile is collected here.
+        let mut carry: Vec<i16> = Vec::new();
+        let mut early: Vec<f32> = Vec::new();
+        let (load_tx, load_rx) = mpsc::channel();
+        let (load_dir, load_abort) = (dir.clone(), abort.clone());
+        let loader = std::thread::Builder::new()
+            .name("whisper-load".into())
+            .spawn(move || {
+                let _ = load_tx.send(build_engine(model, &load_dir, load_abort));
+            });
+        let built = match loader {
+            Ok(_) => loop {
+                match load_rx.recv_timeout(cfg.poll) {
+                    Ok(r) => break r,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        early.extend(mono16k_from_capture(&queue.drain_available(usize::MAX), &mut carry));
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break Err("the loader ended without a result".to_string()),
+                }
+            },
+            Err(_) => build_engine(model, &dir, abort.clone()),
+        };
+        let engine = match built {
             Ok(e) => e,
             Err(e) => {
-                cap_stop.store(true, Ordering::SeqCst);
                 append_crash_log(&format!("voice: local engine did not start: {e}"));
-                return fail("voice-failed");
+                return fail(load_failure_key(&e, &dir.join(model.asset.file), &model.asset));
             }
         };
-        let mut carry: Vec<i16> = Vec::new();
         let q = queue.clone();
         let mut pull = move || -> Result<Vec<f32>, &'static str> {
             let pcm = q.drain_available(usize::MAX);
-            if pcm.is_empty() && q.is_lost() {
+            if pcm.is_empty() && early.is_empty() && q.is_lost() {
                 return Err("voice-mic");
             }
-            Ok(mono16k_from_capture(&pcm, &mut carry))
+            let mut out = std::mem::take(&mut early);
+            out.extend(mono16k_from_capture(&pcm, &mut carry));
+            Ok(out)
         };
-        let app = a.app.clone();
         let (id, token) = (a.id, a.token);
-        let on_text: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |text| {
+        let app = a.app.clone();
+        let on_text: TextSink = Arc::new(move |text| {
             let _ = app.emit("voice-text", VoiceTextEvent { id, token, text });
         });
-        let outcome = run_pipeline(cfg, engine, &mut pull, &a.stop_rx, &abort, on_text);
-        cap_stop.store(true, Ordering::SeqCst);
-        outcome
+        let app = a.app.clone();
+        let on_partial: TextSink = Arc::new(move |text| {
+            let _ = app.emit("voice-partial", VoiceTextEvent { id, token, text });
+        });
+        run_pipeline_with(cfg, engine, &mut pull, &a.stop_rx, &abort, on_text, Some(on_partial))
+    }
+
+    // Sets the capture thread's stop flag when dropped.
+    struct CloseOnDrop(Arc<AtomicBool>);
+    impl Drop for CloseOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    // The error a failed model load is reported with. A model file that no longer matches its
+    // pinned checksum is damaged: it is removed so the models window offers the download again.
+    // Anything else (most often too little free memory) gets its own message.
+    fn load_failure_key(err: &str, path: &Path, asset: &WhisperAsset) -> &'static str {
+        if err == VOICE_ERR_CPU {
+            return VOICE_ERR_CPU;
+        }
+        if file_matches_pin(path, asset) {
+            VOICE_ERR_LOAD
+        } else {
+            let _ = std::fs::remove_file(path);
+            VOICE_ERR_MODEL_DAMAGED
+        }
     }
 
     // Runs on the session thread for the whole session and always ends it the way the window
