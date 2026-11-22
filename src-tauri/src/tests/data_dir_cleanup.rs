@@ -130,6 +130,24 @@ fn a_failed_store_copy_leaves_no_library_for_a_retry_to_adopt() {
 }
 
 #[test]
+fn a_library_inside_the_old_media_folders_is_not_adopted() {
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = media_test_dir("adoptinside");
+    let (current, pointer) = (root.join("old"), root.join("pointer"));
+    touch(&current.join("data.db"));
+    let new = current.join("recordings").join("lib");
+    // Already a library, so the move would adopt it; the old recordings/ goes with the cleanup.
+    touch(&new.join("data.db"));
+    fs::create_dir_all(&pointer).unwrap();
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let moved = move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(()));
+    assert!(moved.unwrap_err().contains("recordings/"));
+    assert!(!pointer.join("datapath").exists());
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn a_target_inside_the_media_folders_is_refused() {
     let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = media_test_dir("inside");

@@ -1414,6 +1414,18 @@ fn rotation_keeps_the_newest_snapshots_by_name() {
 }
 
 #[test]
+fn rotation_orders_snapshots_of_one_second_by_their_number() {
+    let names = ["2026-01-01_10-00-00", "2026-01-01_10-00-00-2", "2026-01-01_10-00-00-10", "2026-01-01_10-00-00-9"];
+    let dir = rotation_dir("rot-suffix", &names);
+    rotate_backups_at(&dir, 2, None, None);
+    assert_eq!(rotation_left(&dir), ["2026-01-01_10-00-00-10", "2026-01-01_10-00-00-9"]);
+    let _ = fs::remove_dir_all(&dir);
+    assert!(backup_order_key("2026-01-01_10-00-00-2") < backup_order_key("2026-01-01_10-00-00-10"));
+    assert!(backup_order_key("2026-01-01_10-00-00") < backup_order_key("2026-01-01_10-00-00-2"));
+    assert!(backup_order_key("2026-01-01_10-00-00-10") < backup_order_key("2026-01-01_10-00-01"));
+}
+
+#[test]
 fn rotation_with_a_keep_of_zero_still_leaves_the_newest_snapshot() {
     let dir = rotation_dir("rot-zero", &["2026-01-01_10-00-00", "2026-01-02_10-00-00"]);
     rotate_backups_at(&dir, 0, None, None);

@@ -2016,6 +2016,13 @@ pub(crate) fn move_store_dir(
     if path_is_inside_dir(new, &current.join("backups")) {
         return Err("the new folder lies inside backups/, which the cleanup deletes".to_string());
     }
+    // The cleanup also removes the old media folders, so a target inside one of them is refused
+    // too, also when it already holds a library that would be adopted (no copy step checks it then).
+    for sub in MEDIA_SUBDIRS {
+        if path_is_inside_dir(new, &current.join(sub)) {
+            return Err(format!("the new folder lies inside {sub}/, which has to be copied"));
+        }
+    }
     // From the end of the flush to the pointer write no database write may reach the folder
     // being left (see DATA_MOVE_IN_PROGRESS). The gate clears itself on every way out; the
     // success path releases it right after the pointer write, before the rebase needs to save.

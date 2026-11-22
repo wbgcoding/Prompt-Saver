@@ -328,6 +328,16 @@ pub(crate) fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsCon
     }
     names.iter().filter(|n| !keep_set.contains(*n)).cloned().collect()
 }
+
+// Sort key of a snapshot folder name, oldest first: the timestamp, then the number a second
+// snapshot within the same second gets ("..._12-00-00-10" comes after "..._12-00-00-2").
+pub(crate) fn backup_order_key(name: &str) -> (&str, u32) {
+    match name.get(19..).and_then(|rest| rest.strip_prefix('-')).and_then(|n| n.parse().ok()) {
+        Some(n) => (&name[..19], n),
+        None => (name, 0),
+    }
+}
+
 // Split out of do_backup() so the command line's headless path can drop old snapshots the
 // same way from an already-resolved folder. A snapshot named in `protect` survives whatever
 // the retention says: a restore takes its safety snapshot before it reads the chosen one,
@@ -342,7 +352,7 @@ pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<
         .filter(|e| e.path().is_dir() && backup_db_file(&e.path()).is_some())
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
-    names.sort(); // oldest first (names are timestamps → chronological)
+    names.sort_by(|a, b| backup_order_key(a).cmp(&backup_order_key(b))); // oldest first
     for name in backups_to_drop(&names, keep, gfs.as_ref()) {
         if protect == Some(name.as_str()) {
             continue;
