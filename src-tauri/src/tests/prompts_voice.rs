@@ -736,11 +736,11 @@ fn voice_should_stop_hard_cap_always_wins() {
 
 #[cfg(windows)]
 #[test]
-fn voice_clamp_durations_enforces_the_real_1_to_60_min_range() {
-    // The UI slider only goes to 60 min/60 sec, but the backend is the
+fn voice_clamp_durations_enforces_the_real_ranges() {
+    // The UI sliders go to 60 min and a 10 min pause, but the backend is the
     // real limit: a value above the slider's own max must still be cut down.
-    assert_eq!(voice::clamp_durations(3600, 60), (3600, 60)); // exactly at the new ceiling
-    assert_eq!(voice::clamp_durations(7200, 999), (3600, 60)); // above it -> clamped
+    assert_eq!(voice::clamp_durations(3600, 600), (3600, 600)); // exactly at the ceilings
+    assert_eq!(voice::clamp_durations(7200, 999), (3600, 600)); // above them -> clamped
     assert_eq!(voice::clamp_durations(0, 0), (60, 0)); // below the floor -> min 60s/1min
 }
 

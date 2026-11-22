@@ -589,6 +589,11 @@ export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
+  // Seconds that read as minutes from one minute on: "45 s", "1 min 30 s", "10 min".
+  if (cfg.display === "secmin" && v >= 60) {
+    const m = Math.floor(v / 60), s = v % 60;
+    return s ? `${fmtUnit(m, "minute", LANG)} ${fmtUnit(s, "second", LANG)}` : fmtUnit(m, "minute", LANG);
+  }
   // seconds keep the SI symbol, which reads the same in every language
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
   const timeUnit = TIME_UNITS[cfg.unit];
@@ -658,7 +663,7 @@ export function valueRow(key) {
   const cur = cfg.stops
     ? () => cfg.stops[Number(slider.value)]
     : () => (isUnlimitedStop() ? 0 : Number(slider.value));
-  const show = cfg.stops ? (v) => String(v) : (v) => (isUnlimitedStop() ? t("valUnlimited") : fmt(v));
+  const show = cfg.stops ? (v) => (cfg.unit ? fmt(v) : String(v)) : (v) => (isUnlimitedStop() ? t("valUnlimited") : fmt(v));
   // Puts the slider and its readout on the stored value; also what resyncValue reruns when
   // another control writes this value (recQuality re-suggests recBitrateKbps).
   const showStored = () => {
@@ -838,9 +843,10 @@ export function dropdownRow(key) {
     if (key === "screenshotFormat") {
       document.querySelector('[data-setting-row="snipSaveQuality"]')?.classList.toggle("hidden", cfg.get() !== "jpeg");
     }
-    // The microphone choice belongs to the local engine only.
+    // The microphone choice and the model manager belong to the local engine only; both the
+    // expert menu and the dictation button's quick menu may show them.
     if (key === "voiceEngine") {
-      document.querySelector('[data-setting-row="voiceMic"]')?.classList.toggle("hidden", cfg.get() !== "whisper");
+      for (const el of document.querySelectorAll('[data-setting-row="voiceMic"], .voice-pop-models')) el.classList.toggle("hidden", cfg.get() !== "whisper");
     }
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild

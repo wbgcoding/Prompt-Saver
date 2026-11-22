@@ -302,6 +302,11 @@ export const groupFlags = (group) => (group.flags || []).map(flagEntry);
 // Rendering ceiling for the copy history window, the same top the old row slider had.
 export const JOURNAL_ROWS_MAX = 10000;
 
+// Pause before dictation stops by itself, in seconds: single seconds at first, then coarser
+// steps up to ten minutes.
+export const VOICE_AUTO_STOP_STOPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 40, 50, 60, 75, 90,
+  120, 150, 180, 240, 300, 360, 420, 480, 540, 600];
+
 // Copy-history slider stops: coarser steps as the value grows (10s -> 100s ->
 // 1000s -> 10000s -> 100000s) so the slider stays smooth all the way to 1,000,000.
 export const HISTORY_STOPS = (() => {
@@ -387,7 +392,7 @@ export const EXPERT_VALUES = {
   // How long a discarded recording stays in its trash before the sweep removes it. Independent
   // of recSweepBroken: the backend runs this sweep either way.
   recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever", gate: "screenRecord" },
-  voiceAutoStopSec: { label: "valVoiceAutoStopSec", min: 1, max: 60, step: 1, def: 10, unit: "s", gate: "voiceAutoStop" },
+  voiceAutoStopSec: { label: "valVoiceAutoStopSec", def: 30, unit: "s", display: "secmin", stops: VOICE_AUTO_STOP_STOPS, gate: "voiceAutoStop" },
   voiceMaxMin: { label: "valVoiceMaxMin", min: 1, max: 60, step: 1, def: 10, unit: "min", gate: "voice" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },

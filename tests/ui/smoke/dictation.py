@@ -26,6 +26,24 @@ def run(browser, tmp):
       if (!sec || !sec.classList.contains('hidden')) errs.push('bvq01: the silence seconds row should be hidden while auto-stop is off');
       if (p.querySelector('.voice-pop-mic, .voice-pop-sound, .voice-pop-sep')) errs.push('bvq01: the menu still has the microphone row or the sound settings button');
       if (!p.firstElementChild || !p.firstElementChild.classList.contains('voice-pop-title')) errs.push('bvq01: the menu does not start with its title');
+      // The local engine rows: the engine choice always, microphone and model manager only for Whisper.
+      if (!rowOf('voiceEngine')) errs.push('bvq01: the engine row is missing');
+      const mic = rowOf('voiceMic');
+      const models = p.querySelector('.voice-pop-models');
+      if (!mic || !mic.classList.contains('hidden')) errs.push('bvq01: the microphone row should be hidden for the Windows engine');
+      if (!models || !models.classList.contains('hidden')) errs.push('bvq01: the models button should be hidden for the Windows engine');
+      const eng = rowOf('voiceEngine') && rowOf('voiceEngine').querySelector('select');
+      if (eng) {
+        eng.value = 'whisper';
+        eng.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(300);
+        if (mic && mic.classList.contains('hidden')) errs.push('bvq01: the microphone row stays hidden after picking Whisper');
+        if (models && models.classList.contains('hidden')) errs.push('bvq01: the models button stays hidden after picking Whisper');
+        eng.value = 'windows';
+        eng.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(300);
+        if (mic && !mic.classList.contains('hidden')) errs.push('bvq01: the microphone row stays visible after picking Windows again');
+      }
       const sw = rowOf('voiceAutoStop') && rowOf('voiceAutoStop').querySelector('input');
       if (sw) {
         sw.click(); await sleep(300);
@@ -87,5 +105,42 @@ def run(browser, tmp):
     window.__FIRE__('voice-text', { id: 1, token: 1, text: 'hello world' });
     await sleep(100);
     if (input.value.trim() !== 'hello world') errs.push('564-v2: the late final text should replace the partial, field holds ' + JSON.stringify(input.value));
+""")
+    # An automatic end (pause or time limit) plays the short stop tone, a manual stop does not;
+    # the pause slider starts at 30 s and reaches ten minutes.
+    failed += ar_probe('bvs01', 'dictation: a stop on silence or the time limit plays the stop tone, a manual stop is silent; the pause slider goes from 30 s to 10 min', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: true } };</script>\n', r"""
+    await bootReady();
+    let started = 0;
+    class FakeOsc { constructor() { this.frequency = { value: 0 }; } connect(n) { return n; } start() { started++; } stop() {} }
+    class FakeGain { constructor() { this.gain = { setValueAtTime() {}, linearRampToValueAtTime() {} }; } connect(n) { return n; } }
+    window.AudioContext = class { constructor() { this.currentTime = 0; this.destination = {}; } createOscillator() { return new FakeOsc(); } createGain() { return new FakeGain(); } };
+    const btn = document.getElementById('voice-btn');
+    let id = 0;
+    const session = async (reason) => {
+      id++;
+      btn.click(); await sleep(100);
+      const before = started;
+      window.__FIRE__('voice-stopped', { id, token: id, reason });
+      await sleep(100);
+      return started - before;
+    };
+    for (const reason of ['silence', 'max', 'manual']) {
+      const n = await session(reason);
+      const want = reason === 'manual' ? 0 : 2;
+      if (n !== want) errs.push('bvs01: ' + reason + ' stop started ' + n + ' tone oscillators, expected ' + want);
+    }
+    btn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await sleep(400);
+    const row = document.querySelector('.voice-pop [data-setting-row="voiceAutoStopSec"]');
+    const slider = row && row.querySelector('input[type=range]');
+    const out = row && row.querySelector('.value-out');
+    if (!slider || !out) errs.push('bvs01: the pause slider is missing');
+    else {
+      if (!/^30\s?s$/.test(out.textContent.trim())) errs.push('bvs01: the pause readout starts at ' + JSON.stringify(out.textContent));
+      slider.value = slider.max;
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(50);
+      if (out.textContent.indexOf('10') < 0 || /s$/.test(out.textContent.trim())) errs.push('bvs01: the top of the pause slider reads ' + JSON.stringify(out.textContent));
+    }
 """)
     return failed

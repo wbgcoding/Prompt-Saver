@@ -195,7 +195,7 @@ pub(super) fn should_stop(idle: Duration, elapsed: Duration, auto_stop_sec: u32,
 // The frontend's slider caps (voiceMaxMin/voiceAutoStopSec) are only convenience; these are
 // the real limits, so a stale or tampered caller cannot bypass them.
 pub(super) fn clamp_durations(max_sec: u32, auto_stop_sec: u32) -> (u32, u32) {
-    (max_sec.clamp(60, 3600), auto_stop_sec.clamp(0, 60))
+    (max_sec.clamp(60, 3600), auto_stop_sec.clamp(0, 600))
 }
 
 // Installed recognition languages. SupportedTopicLanguages only lists tags with an installed

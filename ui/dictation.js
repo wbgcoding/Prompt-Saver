@@ -2,7 +2,7 @@
 import { $, autoGrow, EMPTY_VALUE, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
-import { copyTextChecked, fmtBytes } from "./floatShared.js";
+import { copyTextChecked, fmtBytes, playStopSound } from "./floatShared.js";
 import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache, dropdownRow, flagRow, valueRow } from "./expertMenu.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -578,12 +578,21 @@ export function wireVoiceButton(btn, targetFn) {
   });
 }
 
+// A session the app ended on its own (the pause or the time limit) gets a short tone; a stop the
+// user asked for does not.
+export function voiceStopIsAutomatic(reason) {
+  return reason === "silence" || reason === "max";
+}
+
 // ---- Quick voice settings (right-click on a mic button) ----
 // A second view of the existing voice settings (same rows, same storage as the expert menu).
 export const voicePop = document.createElement("div");
 export function closeVoicePop() { voicePop.classList.add("hidden"); }
 function syncVoicePopGate() {
   voicePop.querySelector('[data-setting-row="voiceAutoStopSec"]')?.classList.toggle("hidden", !flag("voiceAutoStop"));
+  const whisper = txt("voiceEngine") === "whisper";
+  voicePop.querySelector('[data-setting-row="voiceMic"]')?.classList.toggle("hidden", !whisper);
+  voicePop.querySelector(".voice-pop-models")?.classList.toggle("hidden", !whisper);
 }
 function openVoicePop(anchorEl) {
   if (!flag("voice")) return;
@@ -591,8 +600,16 @@ function openVoicePop(anchorEl) {
   const title = document.createElement("div");
   title.className = "voice-pop-title";
   title.textContent = t("voicePopTitle");
+  // The local engine's own rows: the engine choice, its microphone and the model manager (the
+  // last two only while the local engine is picked, as in the expert menu).
+  const models = document.createElement("button");
+  models.type = "button";
+  models.className = "ghost-btn expert-action voice-pop-models";
+  models.textContent = t("whisperModels");
+  models.addEventListener("click", () => { closeVoicePop(); openWhisperModels(); });
   voicePop.append(
     title,
+    dropdownRow("voiceEngine"), dropdownRow("voiceMic"), models,
     dropdownRow("voiceLang"), dropdownRow("voiceInsert"),
     flagRow("voiceAutoStop"), valueRow("voiceAutoStopSec"),
     flagRow("voicePunct"), flagRow("voiceInterim"),
@@ -641,12 +658,17 @@ export function routeVoiceError(err) {
     "voice-failed": "voiceErrFailed",
     "voice-whisper-no-model": "voiceWhisperNoModel",
     "voice-whisper-cpu": "voiceWhisperCpu",
+    "voice-whisper-load": "voiceWhisperLoad",
+    "voice-whisper-damaged": "voiceWhisperDamaged",
     "voice-network": "voiceErrNetwork",
     "voice-mic": "voiceErrMic",
     "voice-audio": "voiceErrAudio",
     "voice-no-topic": "voiceErrNoTopic",
   }[code];
-  if (key) toast(t(key)); else errToast(code);
+  // Model trouble is fixed in the models window, so its messages open it.
+  const modelFix = ["voice-whisper-no-model", "voice-whisper-load", "voice-whisper-damaged"].includes(code);
+  if (key && modelFix) toast(t(key), { label: t("whisperModelsTitle"), onClick: () => openWhisperModels() });
+  else if (key) toast(t(key)); else errToast(code);
 }
 // Joins a new recognized chunk onto the target: one space, except right after a newline or an
 // opening bracket, and never a second space next to one already there.
@@ -785,6 +807,7 @@ export function bindDictation() {
   listen("voice-stopped", (e) => {
     const payload = e.payload || {};
     if (!voiceEventIsMine(payload)) return;
+    if (voiceStopIsAutomatic(payload.reason)) playStopSound();
     finishVoiceSession();
   });
   listen("voice-error", (e) => {

@@ -39,7 +39,7 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("recMaxMin", 0.0, 600.0, false),
     ("recMaxMb", 0.0, 100000.0, false),
     ("recDiscardKeepH", 0.0, 720.0, false),
-    ("voiceAutoStopSec", 1.0, 60.0, false),
+    ("voiceAutoStopSec", 1.0, 600.0, false),
     ("voiceMaxMin", 1.0, 60.0, false),
     ("frostedBlur", 0.0, 20.0, false),
     ("historyPerPrompt", 5.0, 100.0, false),
