@@ -81,7 +81,7 @@ if errorlevel 1 (
     goto :fail
 )
 
-rem The speech engine's bindings are generated with libclang. LIBCLANG_PATH names the folder holding
+rem The speech engine's bindings are built with libclang. LIBCLANG_PATH names the folder holding
 rem libclang.dll; when it is unset, a copy in the project's own .tools folder is used if it is there.
 if not defined LIBCLANG_PATH if exist "%~dp0.tools\libclang\bin\libclang.dll" set "LIBCLANG_PATH=%~dp0.tools\libclang\bin"
 if not defined LIBCLANG_PATH (

@@ -14,3 +14,5 @@ file: src-tauri/src/tests/ffmpeg_jobs.rs  # ffmpeg version banners quoted as ffm
 file: src-tauri/src/tests/fixtures/fixed_key.psb  # encrypted binary fixture, matches are random bytes
 file: src-tauri/src/tests/fixtures/password.psb  # encrypted binary fixture, matches are random bytes
 file: tests/video_ops_check.js  # a made-up folder name with an apostrophe, testing path quoting
+OpenAI  # publisher of the original Whisper models, named in the licence attribution
+openai  # the same name inside the upstream model URL of that attribution
