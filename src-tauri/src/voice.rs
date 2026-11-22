@@ -172,6 +172,14 @@ fn fail(step: &str, e: &windows::core::Error) -> &'static str {
 // The end of a session as the window sees it: the error first (if any), then voice-stopped. The mic
 // name rides only on the nothing-heard error, where it is the whole explanation.
 pub(super) fn emit_end(app: &AppHandle, id: u64, token: u64, reason: &str, error: Option<&'static str>, mic: Option<&str>) {
+    if crate::stop_tone::is_automatic_stop(reason) {
+        crate::stop_tone::play_stop_chime();
+    }
+    emit_end_events(app, id, token, reason, error, mic);
+}
+
+// The end events alone, for an engine that already played the chime when listening ended.
+pub(crate) fn emit_end_events(app: &AppHandle, id: u64, token: u64, reason: &str, error: Option<&'static str>, mic: Option<&str>) {
     if let Some(code) = error {
         let mic = if code == "voice-nothing-heard" { mic.map(str::to_string) } else { None };
         let _ = app.emit("voice-error", VoiceErrorEvent { id, token, code: code.to_string(), mic });

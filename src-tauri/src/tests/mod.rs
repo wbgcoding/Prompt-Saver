@@ -49,6 +49,7 @@ mod views_tests;
 mod clipwatch_tests;
 mod logging_tests;
 mod stats_tests;
+mod stop_tone;
 mod update_tests;
 mod os_integration;
 mod float_resize;

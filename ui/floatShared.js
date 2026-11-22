@@ -507,30 +507,6 @@ export function playCopySound(volumePct) {
   }
 }
 
-// Two soft falling notes when dictation stops by itself (pause or time limit), so a session
-// that ends while the user looks elsewhere does not go unnoticed. Same lazily created context.
-export function playStopSound() {
-  try {
-    if (!copySoundCtx) copySoundCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = copySoundCtx;
-    const now = ctx.currentTime;
-    [[660, 0], [440, 0.12]].forEach(([freq, at]) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, now + at);
-      gain.gain.linearRampToValueAtTime(0.14, now + at + 0.01);
-      gain.gain.linearRampToValueAtTime(0, now + at + 0.11);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + at);
-      osc.stop(now + at + 0.12);
-    });
-  } catch {
-    // No output device: the stop itself is shown on the button anyway.
-  }
-}
-
 // ---- Shared hold-or-tap "show original" toggle ----
 // A press that releases quickly locks the shown state on until pressed once more; the same
 // press held past HOLD_MS shows it only while held. One state machine drives the screenshot

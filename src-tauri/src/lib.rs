@@ -174,6 +174,7 @@ mod whisper_cmds;
 // for a session that can run for minutes.
 #[cfg(windows)]
 mod voice;
+mod stop_tone;
 
 mod rec_engine;
 use rec_engine::*;

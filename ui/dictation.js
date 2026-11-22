@@ -2,7 +2,7 @@
 import { $, autoGrow, EMPTY_VALUE, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
-import { copyTextChecked, fmtBytes, playStopSound } from "./floatShared.js";
+import { copyTextChecked, fmtBytes } from "./floatShared.js";
 import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache, dropdownRow, flagRow, valueRow } from "./expertMenu.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -578,12 +578,6 @@ export function wireVoiceButton(btn, targetFn) {
   });
 }
 
-// A session the app ended on its own (the pause or the time limit) gets a short tone; a stop the
-// user asked for does not.
-export function voiceStopIsAutomatic(reason) {
-  return reason === "silence" || reason === "max";
-}
-
 // ---- Quick voice settings (right-click on a mic button) ----
 // A second view of the existing voice settings (same rows, same storage as the expert menu).
 export const voicePop = document.createElement("div");
@@ -807,7 +801,6 @@ export function bindDictation() {
   listen("voice-stopped", (e) => {
     const payload = e.payload || {};
     if (!voiceEventIsMine(payload)) return;
-    if (voiceStopIsAutomatic(payload.reason)) playStopSound();
     finishVoiceSession();
   });
   listen("voice-error", (e) => {

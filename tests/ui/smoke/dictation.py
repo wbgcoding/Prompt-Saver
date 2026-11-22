@@ -108,27 +108,9 @@ def run(browser, tmp):
 """)
     # An automatic end (pause or time limit) plays the short stop tone, a manual stop does not;
     # the pause slider starts at 30 s and reaches ten minutes.
-    failed += ar_probe('bvs01', 'dictation: a stop on silence or the time limit plays the stop tone, a manual stop is silent; the pause slider goes from 30 s to 10 min', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: true } };</script>\n', r"""
+    failed += ar_probe('bvs01', 'dictation: the pause slider goes from 30 s to 10 min (the stop chime is played by Windows, see the stop_tone unit tests)', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: true } };</script>\n', r"""
     await bootReady();
-    let started = 0;
-    class FakeOsc { constructor() { this.frequency = { value: 0 }; } connect(n) { return n; } start() { started++; } stop() {} }
-    class FakeGain { constructor() { this.gain = { setValueAtTime() {}, linearRampToValueAtTime() {} }; } connect(n) { return n; } }
-    window.AudioContext = class { constructor() { this.currentTime = 0; this.destination = {}; } createOscillator() { return new FakeOsc(); } createGain() { return new FakeGain(); } };
     const btn = document.getElementById('voice-btn');
-    let id = 0;
-    const session = async (reason) => {
-      id++;
-      btn.click(); await sleep(100);
-      const before = started;
-      window.__FIRE__('voice-stopped', { id, token: id, reason });
-      await sleep(100);
-      return started - before;
-    };
-    for (const reason of ['silence', 'max', 'manual']) {
-      const n = await session(reason);
-      const want = reason === 'manual' ? 0 : 2;
-      if (n !== want) errs.push('bvs01: ' + reason + ' stop started ' + n + ' tone oscillators, expected ' + want);
-    }
     btn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     await sleep(400);
     const row = document.querySelector('.voice-pop [data-setting-row="voiceAutoStopSec"]');
